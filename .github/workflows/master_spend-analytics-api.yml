@@ -59,6 +59,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: python-app
+
+      - name: 'start the app'
+        run: |
+         pwd
+         fastapi run main.py
       
       - name: Login to Azure
         uses: azure/login@v2
@@ -73,4 +78,6 @@ jobs:
         with:
           app-name: 'spend-analytics-api'
           slot-name: 'Production'
+     
+
           
