@@ -1,0 +1,29 @@
+# Core Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.5
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+gunicorn==21.2.0
+
+# Database
+sqlalchemy==2.0.37
+aiosqlite==0.20.0
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+alembic==1.14.0
+
+# Caching
+redis==5.2.1
+
+# LLM Provider
+groq==0.13.1
+
+# Testing (Development)
+pytest==8.3.4
+pytest-asyncio==0.25.2
+httpx==0.28.1
+hypothesis==6.125.1
+
+# Code Quality (Development)
+pytest-cov==6.0.0
