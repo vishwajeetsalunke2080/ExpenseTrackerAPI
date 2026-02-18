@@ -62,9 +62,9 @@ jobs:
 
       - name: 'start the app'
         run: |
-         pwd
-         ls
-         .\Scripts\activate
+         python -m venv antenv
+         source antenv/bin/activate
+         pip install -r requirements.txt
          fastapi run main.py
       
       - name: Login to Azure
@@ -83,4 +83,5 @@ jobs:
      
 
           
+
 
