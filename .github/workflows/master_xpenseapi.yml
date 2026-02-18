@@ -74,4 +74,10 @@ jobs:
           app-name: 'XpenseAPI'
           slot-name: 'Production'
 
+      - name: 'Start the app'
+        run: |
+         pwd
+         fastapi run main.py
+
           
+
