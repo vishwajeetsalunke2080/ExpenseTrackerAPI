@@ -63,6 +63,8 @@ jobs:
       - name: 'start the app'
         run: |
          pwd
+         ls
+         .\Scripts\activate
          fastapi run main.py
       
       - name: Login to Azure
@@ -81,3 +83,4 @@ jobs:
      
 
           
+
