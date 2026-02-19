@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):
     - Redis connection cleanup on shutdown
     """
     logger.info("Starting up Expense Tracking API...")
+    logger.info(f"Database URL: {settings.database_url[:50]}...")  # Log first 50 chars for security
     
     # Initialize database tables
     try:

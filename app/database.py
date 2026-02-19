@@ -2,10 +2,12 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from typing import AsyncGenerator
-import os
 
-# Database URL from environment variable
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./expense_tracker.db")
+# Import settings to get DATABASE_URL
+from app.config import settings
+
+# Database URL from settings
+DATABASE_URL = settings.database_url
 
 # Create async engine
 engine = create_async_engine(
