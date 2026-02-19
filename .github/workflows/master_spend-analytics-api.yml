@@ -60,12 +60,11 @@ jobs:
         with:
           name: python-app
 
-      - name: 'start the app'
+      - name: 'create and activate Venv to install requirements'
         run: |
          python -m venv antenv
          source antenv/bin/activate
          pip install -r requirements.txt
-         python -m uvicorn main:app --host 0.0.0.0 --port 8000
       
       - name: Login to Azure
         uses: azure/login@v2
@@ -83,6 +82,7 @@ jobs:
      
 
           
+
 
 
 
