@@ -11,13 +11,15 @@ from app.schemas.account_type import AccountTypeCreate, AccountTypeUpdate, Accou
 class AccountTypeService:
     """Service for account type CRUD operations."""
     
-    def __init__(self, db: AsyncSession):
-        """Initialize account type service with database session.
+    def __init__(self, db: AsyncSession, current_user):
+        """Initialize account type service with database session and current user.
         
         Args:
             db: Async SQLAlchemy database session
+            current_user: Current authenticated user
         """
         self.db = db
+        self.current_user = current_user
     
     async def create_account_type(self, account_data: AccountTypeCreate) -> AccountTypeResponse:
         """Create a new account type, ensuring no duplicates.
@@ -31,13 +33,14 @@ class AccountTypeService:
         Raises:
             ValueError: If account type name already exists
         """
-        # Check for duplicate name
+        # Check for duplicate name for this user
         existing = await self._get_by_name(account_data.name)
         if existing:
             raise ValueError(f"Account type with name '{account_data.name}' already exists")
         
-        # Create new account type
+        # Create new account type with user_id from current_user
         db_account = AccountType(
+            user_id=self.current_user.id,
             name=account_data.name,
             is_default=False
         )
@@ -62,7 +65,12 @@ class AccountTypeService:
             Account type response or None if not found
         """
         result = await self.db.execute(
-            select(AccountType).where(AccountType.id == account_id)
+            select(AccountType).where(
+                and_(
+                    AccountType.id == account_id,
+                    AccountType.user_id == self.current_user.id
+                )
+            )
         )
         account = result.scalar_one_or_none()
         
@@ -76,7 +84,7 @@ class AccountTypeService:
         Returns:
             List of account type responses ordered by name
         """
-        query = select(AccountType).order_by(AccountType.name)
+        query = select(AccountType).where(AccountType.user_id == self.current_user.id).order_by(AccountType.name)
         
         result = await self.db.execute(query)
         accounts = result.scalars().all()
@@ -96,9 +104,14 @@ class AccountTypeService:
         Raises:
             ValueError: If account type not found or duplicate name
         """
-        # Get existing account type
+        # Get existing account type with ownership verification
         result = await self.db.execute(
-            select(AccountType).where(AccountType.id == account_id)
+            select(AccountType).where(
+                and_(
+                    AccountType.id == account_id,
+                    AccountType.user_id == self.current_user.id
+                )
+            )
         )
         account = result.scalar_one_or_none()
         
@@ -135,9 +148,14 @@ class AccountTypeService:
         Raises:
             ValueError: If account type not found or is default
         """
-        # Get existing account type
+        # Get existing account type with ownership verification
         result = await self.db.execute(
-            select(AccountType).where(AccountType.id == account_id)
+            select(AccountType).where(
+                and_(
+                    AccountType.id == account_id,
+                    AccountType.user_id == self.current_user.id
+                )
+            )
         )
         account = result.scalar_one_or_none()
         
@@ -171,7 +189,7 @@ class AccountTypeService:
         await self.db.commit()
     
     async def _get_by_name(self, name: str) -> Optional[AccountType]:
-        """Get account type by name (case-sensitive).
+        """Get account type by name for current user (case-sensitive).
         
         Args:
             name: Account type name
@@ -180,7 +198,12 @@ class AccountTypeService:
             Account type or None if not found
         """
         result = await self.db.execute(
-            select(AccountType).where(AccountType.name == name)
+            select(AccountType).where(
+                and_(
+                    AccountType.name == name,
+                    AccountType.user_id == self.current_user.id
+                )
+            )
         )
         return result.scalar_one_or_none()
     

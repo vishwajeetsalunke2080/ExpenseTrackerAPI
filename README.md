@@ -1,26 +1,111 @@
 # Expense Tracking API
 
-A production-ready FastAPI application for tracking personal expenses, income, and budgets with natural language analytics powered by AI.
+A production-ready FastAPI-based REST API for expense tracking with user authentication, OAuth integration, and AI-powered analytics.
 
 ## Features
 
-- **Expense Management**: Track expenses with categories, accounts, and notes
-- **Income Tracking**: Record income from various sources
-- **Budget Management**: Set monthly budgets per category with automatic usage tracking
-- **Balance Carryforward**: Automatically carry forward monthly savings to the next month
-- **Natural Language Analytics**: Query your financial data using natural language (powered by Groq AI)
-- **RESTful API**: Clean, well-documented API endpoints
-- **Database Migrations**: Alembic for database version control
-- **Caching**: Redis integration for improved performance
+- 🔐 **User Authentication**: JWT-based authentication with RS256 signing
+- 📧 **Email Verification**: Email verification for new user registrations
+- 🔑 **Password Reset**: Secure password reset flow with time-limited tokens
+- 🌐 **OAuth Integration**: Google and GitHub OAuth support
+- 💰 **Expense Management**: Full CRUD operations for expenses, income, and budgets
+- 📊 **AI-Powered Analytics**: Natural language queries powered by Groq LLM
+- 🏷️ **Categories & Account Types**: Customizable categories and payment methods
+- 👤 **User Data Isolation**: Complete data isolation between users
+- 🔒 **Rate Limiting**: Protection against brute force attacks
+- 📝 **Audit Logging**: Comprehensive authentication event logging
 
 ## Tech Stack
 
-- **Framework**: FastAPI 0.115.6
-- **Database**: SQLite with SQLAlchemy ORM (async)
-- **Cache**: Redis
-- **AI/LLM**: Groq (llama-3.3-70b-versatile)
+- **Framework**: FastAPI 0.115+
+- **Database**: PostgreSQL with async SQLAlchemy
+- **Authentication**: JWT with RS256 (RSA keys)
+- **ORM**: SQLAlchemy 2.0+ (async)
 - **Migrations**: Alembic
-- **Testing**: Pytest with async support
+- **Testing**: Pytest with property-based testing (Hypothesis)
+- **LLM**: Groq API (Llama 3.3)
+- **Email**: SMTP (Gmail)
+- **Caching**: Redis (optional)
+
+## Prerequisites
+
+- Python 3.12+
+- PostgreSQL 14+ (or SQLite for development)
+- Redis (optional, for caching)
+- SMTP server credentials (for email)
+- Groq API key (for analytics)
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd FastAPI
+```
+
+### 2. Create virtual environment
+
+```bash
+python -m venv .
+# On Windows
+Scripts\activate.bat
+# On Linux/Mac
+source bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure environment variables
+
+Copy `.env.example` to `.env` and update with your values:
+
+```bash
+cp .env.example .env
+```
+
+Required environment variables:
+- `DATABASE_URL`: PostgreSQL connection string
+- `GROQ_API_KEY`: Groq API key for analytics
+- `SMTP_USERNAME` & `SMTP_PASSWORD`: Email service credentials
+- OAuth credentials (optional): Google and GitHub client IDs and secrets
+
+### 5. Generate RSA keys for JWT
+
+```bash
+python generate_rsa_keys.py
+```
+
+This creates `private_key.pem` and `public_key.pem` for JWT signing.
+
+### 6. Run database migrations
+
+```bash
+alembic upgrade head
+```
+
+### 7. Start the server
+
+```bash
+# Development
+uvicorn main:app --reload
+
+# Production
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+The API will be available at `http://localhost:8000`
+
+## API Documentation
+
+Once the server is running, visit:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **OpenAPI JSON**: http://localhost:8000/openapi.json
 
 ## Project Structure
 
@@ -28,184 +113,47 @@ A production-ready FastAPI application for tracking personal expenses, income, a
 FastAPI/
 ├── app/
 │   ├── api/              # API route handlers
+│   │   ├── auth.py       # Authentication endpoints
+│   │   ├── users.py      # User profile endpoints
+│   │   ├── expenses.py   # Expense endpoints
+│   │   ├── income.py     # Income endpoints
+│   │   ├── budgets.py    # Budget endpoints
+│   │   ├── categories.py # Category endpoints
+│   │   ├── accounts.py   # Account type endpoints
+│   │   ├── analytics.py  # Analytics endpoints
+│   │   └── oauth.py      # OAuth endpoints
 │   ├── models/           # SQLAlchemy models
 │   ├── schemas/          # Pydantic schemas
 │   ├── services/         # Business logic layer
+│   ├── middleware/       # Custom middleware
+│   ├── exceptions/       # Custom exceptions
 │   ├── config.py         # Configuration management
-│   ├── database.py       # Database connection
-│   └── cache.py          # Redis cache setup
+│   └── database.py       # Database connection
 ├── alembic/              # Database migrations
 ├── tests/                # Test suite
-│   ├── unit/            # Unit tests
-│   └── property/        # Property-based tests
-├── main.py              # Application entry point
-├── requirements.txt     # Python dependencies
-├── .env                 # Environment variables (not in git)
-└── README.md           # This file
+├── main.py               # Application entry point
+├── requirements.txt      # Python dependencies
+└── .env.example          # Environment variables template
 ```
 
-## Installation
+## Database Migrations
 
-### Prerequisites
-
-- Python 3.12+
-- Redis server (for caching)
-
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd FastAPI
-   ```
-
-2. **Create virtual environment**
-   ```bash
-   python -m venv .
-   ```
-
-3. **Activate virtual environment**
-   - Windows CMD: `Scripts\activate.bat`
-   - Windows PowerShell: `Scripts\Activate.ps1`
-   - Linux/Mac: `source bin/activate`
-
-4. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-5. **Configure environment variables**
-   
-   Create a `.env` file in the FastAPI directory:
-   ```env
-   # Database
-   DATABASE_URL=sqlite+aiosqlite:///./expense_tracker.db
-   
-   # Redis Cache
-   REDIS_URL=redis://localhost:6379/0
-   CACHE_TTL_MINUTES=15
-   
-   # Groq AI (Get your API key from https://console.groq.com)
-   GROQ_API_KEY=your_groq_api_key_here
-   GROQ_MODEL=llama-3.3-70b-versatile
-   
-   # API
-   API_TITLE=Expense Tracking API
-   API_VERSION=1.0.0
-   ```
-
-6. **Run database migrations**
-   ```bash
-   alembic upgrade head
-   ```
-
-7. **Start Redis server**
-   ```bash
-   redis-server
-   ```
-
-## Running the Application
-
-### Development Server
+### Create a new migration
 
 ```bash
-uvicorn main:app --reload
+alembic revision --autogenerate -m "Description of changes"
 ```
 
-The API will be available at `http://localhost:8000`
-
-### Production Server
+### Apply migrations
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+alembic upgrade head
 ```
 
-## API Documentation
+### Rollback migration
 
-Once the server is running, visit:
-
-- **Interactive API docs (Swagger UI)**: http://localhost:8000/docs
-- **Alternative API docs (ReDoc)**: http://localhost:8000/redoc
-- **OpenAPI schema**: http://localhost:8000/openapi.json
-
-## API Endpoints
-
-### Categories
-- `GET /categories` - List all categories
-- `POST /categories` - Create a new category
-- `GET /categories/{id}` - Get category by ID
-- `PUT /categories/{id}` - Update category
-- `DELETE /categories/{id}` - Delete category
-
-### Account Types
-- `GET /accounts` - List all account types
-- `POST /accounts` - Create account type
-- `GET /accounts/{id}` - Get account type
-- `PUT /accounts/{id}` - Update account type
-- `DELETE /accounts/{id}` - Delete account type
-
-### Expenses
-- `GET /expenses` - List expenses (with filters)
-- `POST /expenses` - Create expense
-- `GET /expenses/{id}` - Get expense
-- `PUT /expenses/{id}` - Update expense
-- `DELETE /expenses/{id}` - Delete expense
-
-### Income
-- `GET /income` - List income records
-- `POST /income` - Create income record
-- `GET /income/{id}` - Get income record
-- `PUT /income/{id}` - Update income record
-- `DELETE /income/{id}` - Delete income record
-
-### Budgets
-- `GET /budgets` - List budgets
-- `POST /budgets` - Create monthly budget
-- `GET /budgets/{id}` - Get budget with usage
-- `PUT /budgets/{id}` - Update budget
-- `DELETE /budgets/{id}` - Delete budget
-
-### Balance Carryforward
-- `POST /balance/carryforward` - Carry forward balance from specific month
-- `POST /balance/carryforward/auto` - Auto carry forward from previous month
-- `GET /balance/monthly-summary` - Get monthly balance summary
-
-### Analytics (Natural Language)
-- `POST /analytics/query` - Query financial data using natural language
-
-## Usage Examples
-
-### Create an Expense
 ```bash
-curl -X POST "http://localhost:8000/expenses" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "date": "2026-02-17",
-    "amount": 50.00,
-    "category": "Food",
-    "account": "Card",
-    "notes": "Lunch at restaurant"
-  }'
-```
-
-### Create a Monthly Budget
-```bash
-curl -X POST "http://localhost:8000/budgets" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "category": "Food",
-    "amount_limit": 500.00
-  }'
-```
-
-### Natural Language Query
-```bash
-curl -X POST "http://localhost:8000/analytics/query?query=What%20are%20my%20total%20expenses%20for%20February%202026"
-```
-
-### Carryforward Monthly Balance
-```bash
-curl -X POST "http://localhost:8000/balance/carryforward/auto"
+alembic downgrade -1
 ```
 
 ## Testing
@@ -220,57 +168,122 @@ pytest
 pytest --cov=app --cov-report=html
 
 # Specific test file
-pytest tests/unit/test_expenses.py
+pytest tests/unit/test_auth_service.py
 
-# Property-based tests
+# Property-based tests only
 pytest tests/property/
 ```
 
-## Database Migrations
+## Security Features
 
-### Create a new migration
+### Authentication
+- JWT tokens with RS256 signing (RSA keys)
+- Access tokens: 15-minute expiration
+- Refresh tokens: 7-day expiration
+- Token revocation support
+
+### Rate Limiting
+- Login attempts: 5 attempts per 15 minutes
+- Account lockout: 15 minutes after max attempts
+- Password reset: 3 attempts per hour
+
+### Data Protection
+- Bcrypt password hashing (cost factor 12)
+- User data isolation at database level
+- 404 responses for unauthorized access (prevents enumeration)
+- CORS configuration for frontend integration
+
+## API Endpoints
+
+### Authentication
+- `POST /auth/signup` - Register new user
+- `POST /auth/signin` - Login
+- `POST /auth/signout` - Logout
+- `POST /auth/refresh` - Refresh access token
+- `POST /auth/verify-email` - Verify email address
+- `POST /auth/forgot-password` - Initiate password reset
+- `POST /auth/reset-password` - Complete password reset
+
+### OAuth
+- `GET /auth/oauth/{provider}` - Initiate OAuth flow
+- `GET /auth/oauth/{provider}/callback` - OAuth callback
+
+### User Profile
+- `GET /users/me` - Get current user profile
+- `PUT /users/me` - Update profile
+- `POST /users/me/change-password` - Change password
+- `POST /users/me/revoke-sessions` - Revoke all sessions
+
+### Expenses
+- `POST /expenses` - Create expense
+- `GET /expenses` - List expenses (with filters)
+- `GET /expenses/{id}` - Get expense by ID
+- `PUT /expenses/{id}` - Update expense
+- `DELETE /expenses/{id}` - Delete expense
+
+### Income
+- `POST /income` - Create income
+- `GET /income` - List income (with filters)
+- `GET /income/{id}` - Get income by ID
+- `PUT /income/{id}` - Update income
+- `DELETE /income/{id}` - Delete income
+
+### Budgets
+- `POST /budgets` - Create budget
+- `GET /budgets` - List budgets
+- `GET /budgets/{id}` - Get budget by ID
+- `PUT /budgets/{id}` - Update budget
+- `DELETE /budgets/{id}` - Delete budget
+
+### Categories
+- `POST /categories` - Create category
+- `GET /categories` - List categories
+- `GET /categories/{id}` - Get category by ID
+- `PUT /categories/{id}` - Update category
+- `DELETE /categories/{id}` - Delete category
+
+### Account Types
+- `POST /accounts` - Create account type
+- `GET /accounts` - List account types
+- `GET /accounts/{id}` - Get account type by ID
+- `PUT /accounts/{id}` - Update account type
+- `DELETE /accounts/{id}` - Delete account type
+
+### Analytics
+- `GET /analytics/query` - Natural language analytics query
+
+## Deployment
+
+### Docker
+
+Build and run with Docker:
+
 ```bash
-alembic revision --autogenerate -m "description of changes"
+docker build -t expense-api .
+docker run -p 8000:8000 --env-file .env expense-api
 ```
 
-### Apply migrations
-```bash
-alembic upgrade head
-```
+### Environment Variables for Production
 
-### Rollback migration
-```bash
-alembic downgrade -1
-```
-
-## Configuration
-
-All configuration is managed through environment variables in the `.env` file:
-
-- `DATABASE_URL`: Database connection string
-- `REDIS_URL`: Redis connection string
-- `CACHE_TTL_MINUTES`: Cache time-to-live in minutes
-- `GROQ_API_KEY`: Groq AI API key for natural language queries
-- `GROQ_MODEL`: Groq model to use
-- `API_TITLE`: API title for documentation
-- `API_VERSION`: API version
-
-## Security Notes
-
-- Never commit `.env` file to version control
-- Use strong API keys in production
-- Consider adding authentication/authorization for production use
-- Use HTTPS in production
-- Regularly update dependencies for security patches
-
-## License
-
-MIT License
+Ensure these are set in production:
+- `DATABASE_URL`: Production database connection
+- `API_BASEURL`: Your production API URL
+- `FRONTEND_URL`: Your frontend URL (for CORS)
+- `JWT_ALGORITHM=RS256`: Use RSA keys in production
+- Generate new RSA keys for production (don't reuse development keys)
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License.
 
 ## Support
 
-For issues and questions, please open an issue on the repository.
+For issues and questions, please open an issue on GitHub.

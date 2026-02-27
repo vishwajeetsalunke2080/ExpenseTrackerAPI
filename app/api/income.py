@@ -10,23 +10,27 @@ from app.database import get_db
 from app.services.income_service import IncomeService
 from app.schemas.income import IncomeCreate, IncomeUpdate, IncomeResponse
 from app.schemas.filter import ExpenseFilter
+from app.middleware.auth import get_current_user
+from app.models.user import User
 
 
 router = APIRouter(prefix="/income", tags=["income"])
 
 
 async def get_income_service(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ) -> IncomeService:
     """Dependency injection for IncomeService.
     
     Args:
         db: Database session from dependency
+        current_user: Authenticated user from dependency
         
     Returns:
         IncomeService instance
     """
-    return IncomeService(db)
+    return IncomeService(db, current_user)
 
 
 @router.post("", response_model=IncomeResponse, status_code=status.HTTP_201_CREATED)
@@ -64,13 +68,13 @@ async def get_income(
         Income data
         
     Raises:
-        HTTPException: 404 if income not found
+        HTTPException: 404 if income not found or not owned
     """
     income = await service.get_income(income_id)
     if not income:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Income with id {income_id} not found"
+            detail="Income not found"
         )
     return income
 
@@ -148,14 +152,14 @@ async def update_income(
         Updated income
         
     Raises:
-        HTTPException: 404 if income not found, 422 if validation fails
+        HTTPException: 404 if income not found or not owned
     """
     try:
         return await service.update_income(income_id, updates)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="Income not found"
         )
 
 
@@ -171,17 +175,17 @@ async def delete_income(
         service: Income service instance
         
     Raises:
-        HTTPException: 404 if income not found
+        HTTPException: 404 if income not found or not owned
     """
     try:
         success = await service.delete_income(income_id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Income with id {income_id} not found"
+                detail="Income not found"
             )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="Income not found"
         )

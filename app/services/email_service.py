@@ -37,7 +37,7 @@ class EmailService:
         self,
         email: str,
         token: str,
-        base_url: str = "http://localhost:8000"
+        base_url: str = settings.api_baseurl
     ) -> None:
         """Send email verification link to user.
         

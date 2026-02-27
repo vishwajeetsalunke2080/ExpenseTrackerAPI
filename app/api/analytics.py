@@ -9,18 +9,22 @@ from app.config import settings
 from app.services.analytics_engine import AnalyticsEngine
 from app.services.expense_service import ExpenseService
 from app.services.income_service import IncomeService
+from app.middleware.auth import get_current_user
+from app.models.user import User
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 async def get_analytics_engine(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ) -> AnalyticsEngine:
     """Dependency injection for AnalyticsEngine.
     
     Args:
         db: Database session from dependency
+        current_user: Authenticated user from dependency
         
     Returns:
         AnalyticsEngine instance
@@ -28,9 +32,9 @@ async def get_analytics_engine(
     # Initialize Groq client
     groq_client = AsyncGroq(api_key=settings.groq_api_key)
     
-    # Initialize services
-    expense_service = ExpenseService(db)
-    income_service = IncomeService(db)
+    # Initialize services with user context
+    expense_service = ExpenseService(db, current_user)
+    income_service = IncomeService(db, current_user)
     
     return AnalyticsEngine(groq_client, expense_service, income_service, model=settings.groq_model)
 

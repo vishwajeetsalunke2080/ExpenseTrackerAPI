@@ -40,6 +40,7 @@ def get_token_service() -> TokenService:
     return TokenService(
         private_key=settings.jwt_private_key,
         public_key=settings.jwt_public_key,
+        secret_key=settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm
     )
 
@@ -93,6 +94,8 @@ async def signup(
     
     Requirements: 1.1, 1.2, 1.5
     """
+    from app.services.user_onboarding_service import UserOnboardingService
+    
     auth_service = AuthService()
     email_service = EmailService()
     ip_address = get_client_ip(request)
@@ -108,6 +111,10 @@ async def signup(
         
         result = await db.execute(select(User).where(User.id == user.id))
         user = result.scalar_one()
+        
+        # Initialize default categories and account types for new user
+        onboarding_service = UserOnboardingService(db)
+        await onboarding_service.initialize_user_defaults(user.id)
         
         from app.models.email_verification import EmailVerificationToken
         token_result = await db.execute(

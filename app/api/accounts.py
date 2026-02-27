@@ -6,21 +6,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.services.account_type_service import AccountTypeService
 from app.schemas.account_type import AccountTypeCreate, AccountTypeUpdate, AccountTypeResponse
+from app.middleware.auth import get_current_user
+from app.models.user import User
 
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 
-async def get_account_service(db: AsyncSession = Depends(get_db)) -> AccountTypeService:
+async def get_account_service(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> AccountTypeService:
     """Dependency injection for AccountTypeService.
     
     Args:
         db: Database session from dependency
+        current_user: Authenticated user from dependency
         
     Returns:
         AccountTypeService instance
     """
-    return AccountTypeService(db)
+    return AccountTypeService(db, current_user)
 
 
 @router.post("", response_model=AccountTypeResponse, status_code=status.HTTP_201_CREATED)
@@ -81,7 +87,7 @@ async def update_account_type(
         Updated account type
         
     Raises:
-        HTTPException: 404 if account type not found, 400 if duplicate name
+        HTTPException: 404 if account type not found or not owned, 400 if duplicate name
     """
     try:
         return await service.update_account_type(account_id, updates)
@@ -90,7 +96,7 @@ async def update_account_type(
         if "not found" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg
+                detail="Account type not found"
             )
         else:
             raise HTTPException(
@@ -111,12 +117,12 @@ async def delete_account_type(
         service: Account type service instance
         
     Raises:
-        HTTPException: 404 if account type not found or is default
+        HTTPException: 404 if account type not found, not owned, or is default
     """
     try:
         await service.delete_account_type(account_id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="Account type not found"
         )

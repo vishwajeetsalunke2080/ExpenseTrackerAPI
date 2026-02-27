@@ -13,13 +13,15 @@ from app.schemas.budget import BudgetCreate, BudgetUpdate, BudgetResponse, Budge
 class BudgetService:
     """Service for budget CRUD operations with monthly usage calculation."""
     
-    def __init__(self, db: AsyncSession):
-        """Initialize budget service with database session.
+    def __init__(self, db: AsyncSession, current_user):
+        """Initialize budget service with database session and current user.
         
         Args:
             db: Async SQLAlchemy database session
+            current_user: Current authenticated user
         """
         self.db = db
+        self.current_user = current_user
     
     async def create_budget(self, budget_data: BudgetCreate) -> BudgetResponse:
         """Create a new budget that applies to every month.
@@ -37,8 +39,13 @@ class BudgetService:
             
         Requirements: 14.1, 14.2
         """
-        # Check if budget already exists for this category
-        existing_query = select(Budget).where(Budget.category == budget_data.category)
+        # Check if budget already exists for this category and user
+        existing_query = select(Budget).where(
+            and_(
+                Budget.category == budget_data.category,
+                Budget.user_id == self.current_user.id
+            )
+        )
         result = await self.db.execute(existing_query)
         existing_budget = result.scalar_one_or_none()
         
@@ -48,8 +55,9 @@ class BudgetService:
                 f"Please update the existing budget instead."
             )
         
-        # Create new budget
+        # Create new budget with user_id from current_user
         db_budget = Budget(
+            user_id=self.current_user.id,
             category=budget_data.category,
             amount_limit=budget_data.amount_limit
         )
@@ -74,7 +82,12 @@ class BudgetService:
         Requirements: 14.3
         """
         result = await self.db.execute(
-            select(Budget).where(Budget.id == budget_id)
+            select(Budget).where(
+                and_(
+                    Budget.id == budget_id,
+                    Budget.user_id == self.current_user.id
+                )
+            )
         )
         budget = result.scalar_one_or_none()
         
@@ -101,7 +114,7 @@ class BudgetService:
             
         Requirements: 14.3, 15.2, 15.3
         """
-        query = select(Budget)
+        query = select(Budget).where(Budget.user_id == self.current_user.id)
         
         # Category filter
         if category:
@@ -129,9 +142,14 @@ class BudgetService:
             
         Requirements: 14.4
         """
-        # Get existing budget
+        # Get existing budget with ownership verification
         result = await self.db.execute(
-            select(Budget).where(Budget.id == budget_id)
+            select(Budget).where(
+                and_(
+                    Budget.id == budget_id,
+                    Budget.user_id == self.current_user.id
+                )
+            )
         )
         budget = result.scalar_one_or_none()
         
@@ -140,10 +158,11 @@ class BudgetService:
         
         # Update fields if provided
         if updates.category is not None:
-            # Check if new category already has a budget
+            # Check if new category already has a budget for this user
             existing_query = select(Budget).where(
                 and_(
                     Budget.category == updates.category,
+                    Budget.user_id == self.current_user.id,
                     Budget.id != budget_id
                 )
             )
@@ -174,9 +193,14 @@ class BudgetService:
             
         Requirements: 14.5
         """
-        # Get existing budget
+        # Get existing budget with ownership verification
         result = await self.db.execute(
-            select(Budget).where(Budget.id == budget_id)
+            select(Budget).where(
+                and_(
+                    Budget.id == budget_id,
+                    Budget.user_id == self.current_user.id
+                )
+            )
         )
         budget = result.scalar_one_or_none()
         
@@ -211,10 +235,11 @@ class BudgetService:
         last_day = calendar.monthrange(year, month)[1]
         end_date = date_type(year, month, last_day)
         
-        # Query expenses in the budget's category for the specified month
+        # Query expenses in the budget's category for the specified month, filtered by user
         query = select(func.sum(Expense.amount)).where(
             and_(
                 Expense.category == budget.category,
+                Expense.user_id == self.current_user.id,
                 Expense.date >= start_date,
                 Expense.date <= end_date
             )

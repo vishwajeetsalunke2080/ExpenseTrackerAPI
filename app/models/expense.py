@@ -1,5 +1,6 @@
 """SQLAlchemy models for expense tracking entities."""
-from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, Boolean, Enum, Index
+from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, Boolean, Enum, Index, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 from app.database import Base
@@ -16,6 +17,7 @@ class Expense(Base):
     __tablename__ = "expenses"
     
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     date = Column(Date, nullable=False, index=True)
     amount = Column(Numeric(10, 2), nullable=False)
     category = Column(String(100), nullable=False, index=True)
@@ -24,10 +26,15 @@ class Expense(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     
-    # Composite index for common query patterns
+    # Relationships
+    user = relationship("User", back_populates="expenses")
+    
+    # Composite indexes for common query patterns with user isolation
     __table_args__ = (
-        Index('ix_expenses_date_category', 'date', 'category'),
-        Index('ix_expenses_date_account', 'date', 'account'),
+        Index('ix_expenses_user_date', 'user_id', 'date'),
+        Index('ix_expenses_user_category', 'user_id', 'category'),
+        Index('ix_expenses_user_account', 'user_id', 'account'),
+        Index('ix_expenses_user_date_category', 'user_id', 'date', 'category'),
     )
 
 
@@ -36,6 +43,7 @@ class Income(Base):
     __tablename__ = "income"
     
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     date = Column(Date, nullable=False, index=True)
     amount = Column(Numeric(10, 2), nullable=False)
     category = Column(String(100), nullable=False, index=True)
@@ -43,9 +51,14 @@ class Income(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     
-    # Composite index for common query patterns
+    # Relationships
+    user = relationship("User", back_populates="income")
+    
+    # Composite indexes for common query patterns with user isolation
     __table_args__ = (
-        Index('ix_income_date_category', 'date', 'category'),
+        Index('ix_income_user_date', 'user_id', 'date'),
+        Index('ix_income_user_category', 'user_id', 'category'),
+        Index('ix_income_user_date_category', 'user_id', 'date', 'category'),
     )
 
 
@@ -54,9 +67,20 @@ class Category(Base):
     __tablename__ = "categories"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False, index=True)
     type = Column(Enum(CategoryTypeEnum), nullable=False, index=True)
     is_default = Column(Boolean, default=False, nullable=False)
+    
+    # Relationships
+    user = relationship("User", back_populates="categories")
+    
+    # Composite indexes and unique constraint for user-scoped category names
+    __table_args__ = (
+        Index('ix_categories_user_name', 'user_id', 'name'),
+        Index('ix_categories_user_type', 'user_id', 'type'),
+        UniqueConstraint('user_id', 'name', name='uq_categories_user_name'),
+    )
 
 
 class AccountType(Base):
@@ -64,8 +88,18 @@ class AccountType(Base):
     __tablename__ = "account_types"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False, index=True)
     is_default = Column(Boolean, default=False, nullable=False)
+    
+    # Relationships
+    user = relationship("User", back_populates="account_types")
+    
+    # Composite index and unique constraint for user-scoped account type names
+    __table_args__ = (
+        Index('ix_account_types_user_name', 'user_id', 'name'),
+        UniqueConstraint('user_id', 'name', name='uq_account_types_user_name'),
+    )
 
 
 class Budget(Base):
@@ -73,7 +107,17 @@ class Budget(Base):
     __tablename__ = "budgets"
     
     id = Column(Integer, primary_key=True, index=True)
-    category = Column(String(100), nullable=False, index=True, unique=True)  # One budget per category
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    category = Column(String(100), nullable=False, index=True)
     amount_limit = Column(Numeric(10, 2), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # Relationships
+    user = relationship("User", back_populates="budgets")
+    
+    # Composite index and unique constraint: one budget per category per user
+    __table_args__ = (
+        Index('ix_budgets_user_category', 'user_id', 'category'),
+        UniqueConstraint('user_id', 'category', name='uq_budgets_user_category'),
+    )

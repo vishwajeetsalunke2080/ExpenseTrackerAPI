@@ -36,6 +36,7 @@ def get_token_service() -> TokenService:
     return TokenService(
         private_key=settings.jwt_private_key,
         public_key=settings.jwt_public_key,
+        secret_key=settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm
     )
 

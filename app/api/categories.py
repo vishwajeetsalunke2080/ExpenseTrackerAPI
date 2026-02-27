@@ -6,21 +6,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.services.category_service import CategoryService
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse, CategoryType
+from app.middleware.auth import get_current_user
+from app.models.user import User
 
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
-async def get_category_service(db: AsyncSession = Depends(get_db)) -> CategoryService:
+async def get_category_service(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> CategoryService:
     """Dependency injection for CategoryService.
     
     Args:
         db: Database session from dependency
+        current_user: Authenticated user from dependency
         
     Returns:
         CategoryService instance
     """
-    return CategoryService(db)
+    return CategoryService(db, current_user)
 
 
 @router.post("", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
@@ -83,7 +89,7 @@ async def update_category(
         Updated category
         
     Raises:
-        HTTPException: 404 if category not found, 400 if duplicate name
+        HTTPException: 404 if category not found or not owned, 400 if duplicate name
     """
     try:
         return await service.update_category(category_id, updates)
@@ -92,7 +98,7 @@ async def update_category(
         if "not found" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg
+                detail="Category not found"
             )
         else:
             raise HTTPException(
@@ -113,12 +119,12 @@ async def delete_category(
         service: Category service instance
         
     Raises:
-        HTTPException: 404 if category not found or is default
+        HTTPException: 404 if category not found, not owned, or is default
     """
     try:
         await service.delete_category(category_id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="Category not found"
         )

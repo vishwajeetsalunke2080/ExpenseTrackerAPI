@@ -173,6 +173,7 @@ async def oauth_callback(
         token_service = TokenService(
             private_key=settings.jwt_private_key,
             public_key=settings.jwt_public_key,
+            secret_key=settings.jwt_secret_key,
             algorithm=settings.jwt_algorithm
         )
         access_token = token_service.generate_access_token(user.id, user.email)

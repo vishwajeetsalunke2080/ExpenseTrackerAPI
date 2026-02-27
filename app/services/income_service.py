@@ -12,13 +12,15 @@ from app.schemas.filter import ExpenseFilter
 class IncomeService:
     """Service for income CRUD operations."""
     
-    def __init__(self, db: AsyncSession):
-        """Initialize income service with database session.
+    def __init__(self, db: AsyncSession, current_user):
+        """Initialize income service with database session and current user.
         
         Args:
             db: Async SQLAlchemy database session
+            current_user: Current authenticated user
         """
         self.db = db
+        self.current_user = current_user
     
     async def create_income(self, income_data: IncomeCreate) -> IncomeResponse:
         """Create a new income record.
@@ -31,8 +33,9 @@ class IncomeService:
             
         Requirements: 13.1, 13.2
         """
-        # Create new income
+        # Create new income with user_id from current_user
         db_income = Income(
+            user_id=self.current_user.id,
             date=income_data.date,
             amount=income_data.amount,
             category=income_data.category,
@@ -56,9 +59,14 @@ class IncomeService:
             
         Requirements: 13.5
         """
-        # Query database
+        # Query database with user_id filter
         result = await self.db.execute(
-            select(Income).where(Income.id == income_id)
+            select(Income).where(
+                and_(
+                    Income.id == income_id,
+                    Income.user_id == self.current_user.id
+                )
+            )
         )
         income = result.scalar_one_or_none()
         
@@ -82,9 +90,14 @@ class IncomeService:
             
         Requirements: 13.6, 13.8
         """
-        # Get existing income
+        # Get existing income with ownership verification
         result = await self.db.execute(
-            select(Income).where(Income.id == income_id)
+            select(Income).where(
+                and_(
+                    Income.id == income_id,
+                    Income.user_id == self.current_user.id
+                )
+            )
         )
         income = result.scalar_one_or_none()
         
@@ -120,9 +133,14 @@ class IncomeService:
             
         Requirements: 13.7, 13.8
         """
-        # Get existing income
+        # Get existing income with ownership verification
         result = await self.db.execute(
-            select(Income).where(Income.id == income_id)
+            select(Income).where(
+                and_(
+                    Income.id == income_id,
+                    Income.user_id == self.current_user.id
+                )
+            )
         )
         income = result.scalar_one_or_none()
         
@@ -153,8 +171,8 @@ class IncomeService:
             
         Requirements: 13.4, 13.8
         """
-        # Build query with filters
-        query = select(Income)
+        # Build query with filters - always filter by user_id
+        query = select(Income).where(Income.user_id == self.current_user.id)
         conditions = []
         
         # Date range filter (inclusive)

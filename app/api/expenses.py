@@ -10,23 +10,27 @@ from app.database import get_db
 from app.services.expense_service import ExpenseService
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse
 from app.schemas.filter import ExpenseFilter
+from app.middleware.auth import get_current_user
+from app.models.user import User
 
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
 
 
 async def get_expense_service(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ) -> ExpenseService:
     """Dependency injection for ExpenseService.
     
     Args:
         db: Database session from dependency
+        current_user: Authenticated user from dependency
         
     Returns:
         ExpenseService instance
     """
-    return ExpenseService(db)
+    return ExpenseService(db, current_user)
 
 
 @router.post("", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
@@ -64,13 +68,13 @@ async def get_expense(
         Expense data
         
     Raises:
-        HTTPException: 404 if expense not found
+        HTTPException: 404 if expense not found or not owned
     """
     expense = await service.get_expense(expense_id)
     if not expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Expense with id {expense_id} not found"
+            detail="Expense not found"
         )
     return expense
 
@@ -150,14 +154,14 @@ async def update_expense(
         Updated expense
         
     Raises:
-        HTTPException: 404 if expense not found, 422 if validation fails
+        HTTPException: 404 if expense not found or not owned
     """
     try:
         return await service.update_expense(expense_id, updates)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="Expense not found"
         )
 
 
@@ -173,17 +177,17 @@ async def delete_expense(
         service: Expense service instance
         
     Raises:
-        HTTPException: 404 if expense not found
+        HTTPException: 404 if expense not found or not owned
     """
     try:
         success = await service.delete_expense(expense_id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Expense with id {expense_id} not found"
+                detail="Expense not found"
             )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="Expense not found"
         )

@@ -4,24 +4,37 @@ __pycache__/
 *$py.class
 *.so
 .Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
 
 # Virtual Environment
+venv/
+env/
+ENV/
 Lib/
 Scripts/
 Include/
 pyvenv.cfg
+pip-selfcheck.json
 
 # Environment variables
 .env
-.env.local
+.env.*
+!.env.example
 
 # RSA Keys (JWT signing)
 private_key.pem
+public_key.pem
+*.pem
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
 
 # IDE
 .vscode/
@@ -29,21 +42,60 @@ private_key.pem
 *.swp
 *.swo
 *~
+.project
+.pydevproject
+.settings/
 
 # Testing
 .pytest_cache/
 .hypothesis/
 .coverage
+.coverage.*
 htmlcov/
 *.cover
-tests
+.tox/
+.nox/
+coverage.xml
+*.coveragerc
 
 # Alembic
 alembic/versions/*.pyc
 
 # Logs
 *.log
+logs/
+*.log.*
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Documentation builds
+docs/_build/
+site/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# pytype
+.pytype/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Redis dump
+dump.rdb

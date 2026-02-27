@@ -19,7 +19,7 @@ class AnalyticsEngine:
     analytics queries against expense data.
     """
     
-    def __init__(self, groq_client: AsyncGroq, expense_service: ExpenseService, income_service: IncomeService, model: str = "llama-3.3-70b-versatile"):
+    def __init__(self, groq_client: AsyncGroq, expense_service: ExpenseService, income_service: IncomeService, current_user, model: str = "llama-3.3-70b-versatile"):
         """
         Initialize the analytics engine.
         
@@ -27,11 +27,13 @@ class AnalyticsEngine:
             groq_client: Async Groq client for LLM queries
             expense_service: Service for querying expense data
             income_service: Service for querying income data
+            current_user: Current authenticated user
             model: Groq model to use for queries
         """
         self.client = groq_client
         self.expense_service = expense_service
         self.income_service = income_service
+        self.current_user = current_user
         self.model = model
     
     async def process_query(self, query: str) -> Dict[str, Any]:

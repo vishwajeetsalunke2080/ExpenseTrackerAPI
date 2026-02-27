@@ -12,13 +12,16 @@ from app.schemas.filter import ExpenseFilter
 class ExpenseService:
     """Service for expense CRUD operations."""
     
-    def __init__(self, db: AsyncSession):
-        """Initialize expense service with database session.
-        
+    def __init__(self, db: AsyncSession, current_user):
+        """Initialize expense service with database session and current user.
+
         Args:
             db: Async SQLAlchemy database session
+            current_user: Current authenticated user
         """
         self.db = db
+        self.current_user = current_user
+
     
     async def create_expense(self, expense_data: ExpenseCreate) -> ExpenseResponse:
         """Create a new expense.
@@ -31,8 +34,9 @@ class ExpenseService:
             
         Requirements: 1.1, 1.2, 1.5
         """
-        # Create new expense
+        # Create new expense with user_id from current_user
         db_expense = Expense(
+            user_id=self.current_user.id,
             date=expense_data.date,
             amount=expense_data.amount,
             category=expense_data.category,
@@ -57,9 +61,14 @@ class ExpenseService:
             
         Requirements: 2.2
         """
-        # Query database
+        # Query database with user_id filter
         result = await self.db.execute(
-            select(Expense).where(Expense.id == expense_id)
+            select(Expense).where(
+                and_(
+                    Expense.id == expense_id,
+                    Expense.user_id == self.current_user.id
+                )
+            )
         )
         expense = result.scalar_one_or_none()
         
@@ -83,9 +92,14 @@ class ExpenseService:
             
         Requirements: 3.1, 3.4
         """
-        # Get existing expense
+        # Get existing expense with ownership verification
         result = await self.db.execute(
-            select(Expense).where(Expense.id == expense_id)
+            select(Expense).where(
+                and_(
+                    Expense.id == expense_id,
+                    Expense.user_id == self.current_user.id
+                )
+            )
         )
         expense = result.scalar_one_or_none()
         
@@ -123,9 +137,14 @@ class ExpenseService:
             
         Requirements: 4.1, 4.3
         """
-        # Get existing expense
+        # Get existing expense with ownership verification
         result = await self.db.execute(
-            select(Expense).where(Expense.id == expense_id)
+            select(Expense).where(
+                and_(
+                    Expense.id == expense_id,
+                    Expense.user_id == self.current_user.id
+                )
+            )
         )
         expense = result.scalar_one_or_none()
         
@@ -157,8 +176,8 @@ class ExpenseService:
             
         Requirements: 2.1, 2.4, 5.1, 5.2, 5.3, 5.4, 5.5
         """
-        # Build query with filters
-        query = select(Expense)
+        # Build query with filters - always filter by user_id
+        query = select(Expense).where(Expense.user_id == self.current_user.id)
         conditions = []
         
         # Date range filter (inclusive)

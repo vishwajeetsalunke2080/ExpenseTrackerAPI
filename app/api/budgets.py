@@ -7,23 +7,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.services.budget_service import BudgetService
 from app.schemas.budget import BudgetCreate, BudgetUpdate, BudgetResponse
+from app.middleware.auth import get_current_user
+from app.models.user import User
 
 
 router = APIRouter(prefix="/budgets", tags=["budgets"])
 
 
 async def get_budget_service(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ) -> BudgetService:
     """Dependency injection for BudgetService.
     
     Args:
         db: Database session from dependency
+        current_user: Authenticated user from dependency
         
     Returns:
         BudgetService instance
     """
-    return BudgetService(db)
+    return BudgetService(db, current_user)
 
 
 @router.post("", response_model=BudgetResponse, status_code=status.HTTP_201_CREATED)
@@ -73,7 +77,7 @@ async def get_budget(
         Budget data with usage information for the specified month
         
     Raises:
-        HTTPException: 404 if budget not found
+        HTTPException: 404 if budget not found or not owned
         
     Requirements: 14.3, 15.1, 15.2, 15.3
     """
@@ -81,7 +85,7 @@ async def get_budget(
     if not budget:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Budget with id {budget_id} not found"
+            detail="Budget not found"
         )
     return budget
 
@@ -130,7 +134,7 @@ async def update_budget(
         Updated budget with recalculated usage
         
     Raises:
-        HTTPException: 404 if budget not found, 422 if validation fails
+        HTTPException: 404 if budget not found or not owned
         
     Requirements: 14.4
     """
@@ -139,7 +143,7 @@ async def update_budget(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="Budget not found"
         )
 
 
@@ -155,7 +159,7 @@ async def delete_budget(
         service: Budget service instance
         
     Raises:
-        HTTPException: 404 if budget not found
+        HTTPException: 404 if budget not found or not owned
         
     Requirements: 14.5
     """
@@ -164,10 +168,10 @@ async def delete_budget(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Budget with id {budget_id} not found"
+                detail="Budget not found"
             )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="Budget not found"
         )

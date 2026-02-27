@@ -37,6 +37,11 @@ class User(Base):
     # Relationships
     oauth_accounts = relationship("OAuthAccount", back_populates="user", cascade="all, delete-orphan")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    expenses = relationship("Expense", back_populates="user", cascade="all, delete-orphan")
+    income = relationship("Income", back_populates="user", cascade="all, delete-orphan")
+    budgets = relationship("Budget", back_populates="user", cascade="all, delete-orphan")
+    categories = relationship("Category", back_populates="user", cascade="all, delete-orphan")
+    account_types = relationship("AccountType", back_populates="user", cascade="all, delete-orphan")
     
     # Indexes for common queries
     __table_args__ = (

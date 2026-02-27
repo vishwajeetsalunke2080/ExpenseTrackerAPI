@@ -11,13 +11,15 @@ from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryRespons
 class CategoryService:
     """Service for category CRUD operations."""
     
-    def __init__(self, db: AsyncSession):
-        """Initialize category service with database session.
+    def __init__(self, db: AsyncSession, current_user):
+        """Initialize category service with database session and current user.
         
         Args:
             db: Async SQLAlchemy database session
+            current_user: Current authenticated user
         """
         self.db = db
+        self.current_user = current_user
     
     async def create_category(self, category_data: CategoryCreate) -> CategoryResponse:
         """Create a new category, ensuring no duplicates.
@@ -31,7 +33,7 @@ class CategoryService:
         Raises:
             ValueError: If category name already exists
         """
-        # Check for duplicate name
+        # Check for duplicate name for this user
         existing = await self._get_by_name(category_data.name)
         if existing:
             raise ValueError(f"Category with name '{category_data.name}' already exists")
@@ -39,8 +41,9 @@ class CategoryService:
         # Convert CategoryType enum to CategoryTypeEnum
         category_type_enum = CategoryTypeEnum.EXPENSE if category_data.type == CategoryType.EXPENSE else CategoryTypeEnum.INCOME
         
-        # Create new category
+        # Create new category with user_id from current_user
         db_category = Category(
+            user_id=self.current_user.id,
             name=category_data.name,
             type=category_type_enum,
             is_default=False
@@ -66,7 +69,12 @@ class CategoryService:
             Category response or None if not found
         """
         result = await self.db.execute(
-            select(Category).where(Category.id == category_id)
+            select(Category).where(
+                and_(
+                    Category.id == category_id,
+                    Category.user_id == self.current_user.id
+                )
+            )
         )
         category = result.scalar_one_or_none()
         
@@ -83,7 +91,7 @@ class CategoryService:
         Returns:
             List of category responses
         """
-        query = select(Category)
+        query = select(Category).where(Category.user_id == self.current_user.id)
         
         if category_type:
             # Convert CategoryType to CategoryTypeEnum
@@ -110,9 +118,14 @@ class CategoryService:
         Raises:
             ValueError: If category not found or duplicate name
         """
-        # Get existing category
+        # Get existing category with ownership verification
         result = await self.db.execute(
-            select(Category).where(Category.id == category_id)
+            select(Category).where(
+                and_(
+                    Category.id == category_id,
+                    Category.user_id == self.current_user.id
+                )
+            )
         )
         category = result.scalar_one_or_none()
         
@@ -149,9 +162,14 @@ class CategoryService:
         Raises:
             ValueError: If category not found or is default
         """
-        # Get existing category
+        # Get existing category with ownership verification
         result = await self.db.execute(
-            select(Category).where(Category.id == category_id)
+            select(Category).where(
+                and_(
+                    Category.id == category_id,
+                    Category.user_id == self.current_user.id
+                )
+            )
         )
         category = result.scalar_one_or_none()
         
@@ -202,7 +220,7 @@ class CategoryService:
         await self.db.commit()
     
     async def _get_by_name(self, name: str) -> Optional[Category]:
-        """Get category by name (case-sensitive).
+        """Get category by name for current user (case-sensitive).
         
         Args:
             name: Category name
@@ -211,7 +229,12 @@ class CategoryService:
             Category or None if not found
         """
         result = await self.db.execute(
-            select(Category).where(Category.name == name)
+            select(Category).where(
+                and_(
+                    Category.name == name,
+                    Category.user_id == self.current_user.id
+                )
+            )
         )
         return result.scalar_one_or_none()
     

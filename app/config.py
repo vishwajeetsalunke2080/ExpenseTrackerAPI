@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     # API
     api_title: str = "Expense Tracking API"
     api_version: str = "1.0.0"
+    api_baseurl: str = "http://localhost:8000"
     
     # Frontend Configuration
     frontend_url: str = "http://localhost:3000"
@@ -52,16 +53,19 @@ class Settings(BaseSettings):
     github_client_secret: str = ""
     github_redirect_uri: str = "http://localhost:8000/auth/oauth/github/callback"
     
-    # JWT Configuration (RS256 with RSA keys)
+    # JWT Configuration (RS256 with RSA keys or HS256 with secret key)
     jwt_algorithm: str = "RS256"
     jwt_private_key_path: str = "private_key.pem"
     jwt_public_key_path: str = "public_key.pem"
+    jwt_secret_key: Optional[str] = None  # For HS256 algorithm (testing/development)
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
     
     @property
-    def jwt_private_key(self) -> str:
-        """Load RSA private key from file."""
+    def jwt_private_key(self) -> Optional[str]:
+        """Load RSA private key from file (for RS256 algorithm)."""
+        if self.jwt_algorithm == "HS256":
+            return None
         key_path = BASE_DIR / self.jwt_private_key_path
         if not key_path.exists():
             raise FileNotFoundError(
@@ -72,8 +76,10 @@ class Settings(BaseSettings):
             return f.read()
     
     @property
-    def jwt_public_key(self) -> str:
-        """Load RSA public key from file."""
+    def jwt_public_key(self) -> Optional[str]:
+        """Load RSA public key from file (for RS256 algorithm)."""
+        if self.jwt_algorithm == "HS256":
+            return None
         key_path = BASE_DIR / self.jwt_public_key_path
         if not key_path.exists():
             raise FileNotFoundError(
