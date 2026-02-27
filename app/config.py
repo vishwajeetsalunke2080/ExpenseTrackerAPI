@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     api_title: str = "Expense Tracking API"
     api_version: str = "1.0.0"
     
+    # Frontend Configuration
+    frontend_url: str = "http://localhost:3000"
+    
     # Email Service Configuration
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587

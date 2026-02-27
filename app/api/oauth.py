@@ -97,19 +97,19 @@ async def oauth_login(provider: str) -> RedirectResponse:
     return RedirectResponse(url=authorization_url, status_code=302)
 
 
-@router.get("/{provider}/callback", response_model=TokenResponse)
+@router.get("/{provider}/callback", response_class=RedirectResponse)
 async def oauth_callback(
     provider: str,
     code: str = Query(..., description="Authorization code from OAuth provider"),
     state: str = Query(None, description="State parameter for CSRF protection"),
     db: AsyncSession = Depends(get_db)
-) -> Dict[str, str]:
+) -> RedirectResponse:
     """Handle OAuth callback and complete authentication.
     
     Processes the OAuth callback by exchanging the authorization code for
     an access token, retrieving user information from the provider, and
-    creating or linking a user account. Returns JWT tokens for the
-    authenticated user.
+    creating or linking a user account. Redirects back to frontend with
+    JWT tokens in query parameters.
     
     Args:
         provider: OAuth provider name ('google' or 'github')
@@ -118,7 +118,7 @@ async def oauth_callback(
         db: Database session
         
     Returns:
-        TokenResponse: Access token and refresh token for authenticated user
+        RedirectResponse: Redirect to frontend with tokens in query params
         
     Raises:
         HTTPException: If OAuth flow fails or provider returns an error
@@ -141,10 +141,9 @@ async def oauth_callback(
         expires_in = token_response.get("expires_in")
         
         if not provider_access_token:
-            raise HTTPException(
-                status_code=400,
-                detail="Failed to obtain access token from provider"
-            )
+            # Redirect to frontend with error
+            error_url = f"{settings.frontend_url}/auth/callback?error=token_exchange_failed"
+            return RedirectResponse(url=error_url, status_code=302)
         
         # Get user information from provider
         user_info = await oauth_service.get_user_info(provider_access_token)
@@ -155,10 +154,9 @@ async def oauth_callback(
         name = user_info.get("name")
         
         if not provider_user_id or not email:
-            raise HTTPException(
-                status_code=400,
-                detail="Failed to obtain user information from provider"
-            )
+            # Redirect to frontend with error
+            error_url = f"{settings.frontend_url}/auth/callback?error=user_info_failed"
+            return RedirectResponse(url=error_url, status_code=302)
         
         # Authenticate or create user
         user = await oauth_service.authenticate_or_create_user(
@@ -180,22 +178,15 @@ async def oauth_callback(
         access_token = token_service.generate_access_token(user.id, user.email)
         refresh_token = await token_service.generate_refresh_token(user.id, db)
         
-        return TokenResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer",
-            expires_in=900  # 15 minutes in seconds
-        )
+        # Redirect to frontend with tokens in query parameters
+        callback_url = f"{settings.frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}&token_type=bearer"
+        return RedirectResponse(url=callback_url, status_code=302)
         
     except ValueError as e:
-        # OAuth provider error
-        raise HTTPException(
-            status_code=400,
-            detail=f"OAuth authentication failed: {str(e)}"
-        )
+        # OAuth provider error - redirect to frontend with error
+        error_url = f"{settings.frontend_url}/auth/callback?error=oauth_failed&message={str(e)}"
+        return RedirectResponse(url=error_url, status_code=302)
     except Exception as e:
-        # Unexpected error
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error during OAuth authentication: {str(e)}"
-        )
+        # Unexpected error - redirect to frontend with error
+        error_url = f"{settings.frontend_url}/auth/callback?error=internal_error&message={str(e)}"
+        return RedirectResponse(url=error_url, status_code=302)

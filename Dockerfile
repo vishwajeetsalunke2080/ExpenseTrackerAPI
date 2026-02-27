@@ -4,7 +4,9 @@ WORKDIR /app
 
 # Install dependencies
 COPY requirements.txt .
+COPY generate_rsa_keys.py .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN python3 generate_rsa_keys.py
 
 # Copy application
 COPY app/ ./app/
