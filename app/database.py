@@ -49,7 +49,7 @@ async def init_db():
     Must be called after all models are imported.
     """
     # Import all models to ensure they're registered with Base.metadata
-    from app.models import Expense, Income, Category, AccountType, Budget
+    from app.models import Expense, Income, Category, AccountType, Budget, User, OAuthAccount, RefreshToken, EmailVerificationToken, PasswordResetToken, AuthLog, RateLimitAttempt, AccountLock
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

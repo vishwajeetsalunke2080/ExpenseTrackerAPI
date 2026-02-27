@@ -1,32 +1,27 @@
-"""Expense service for managing expense CRUD operations with caching."""
+"""Expense service for managing expense CRUD operations."""
 from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from decimal import Decimal
-import hashlib
-import json
 
 from app.models.expense import Expense
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse
 from app.schemas.filter import ExpenseFilter
-from app.services.cache_service import CacheService
 
 
 class ExpenseService:
-    """Service for expense CRUD operations with caching support."""
+    """Service for expense CRUD operations."""
     
-    def __init__(self, db: AsyncSession, cache: CacheService):
-        """Initialize expense service with database session and cache.
+    def __init__(self, db: AsyncSession):
+        """Initialize expense service with database session.
         
         Args:
             db: Async SQLAlchemy database session
-            cache: Cache service for Redis operations
         """
         self.db = db
-        self.cache = cache
     
     async def create_expense(self, expense_data: ExpenseCreate) -> ExpenseResponse:
-        """Create a new expense and invalidate relevant caches.
+        """Create a new expense.
         
         Args:
             expense_data: Expense creation data
@@ -49,13 +44,10 @@ class ExpenseService:
         await self.db.commit()
         await self.db.refresh(db_expense)
         
-        # Invalidate list caches since we added a new expense
-        await self.cache.delete_pattern("expenses:filter:*")
-        
         return self._to_response(db_expense)
     
     async def get_expense(self, expense_id: int) -> Optional[ExpenseResponse]:
-        """Retrieve expense by ID with caching.
+        """Retrieve expense by ID.
         
         Args:
             expense_id: Expense ID
@@ -65,14 +57,6 @@ class ExpenseService:
             
         Requirements: 2.2
         """
-        # Check cache first
-        cache_key = f"expense:{expense_id}"
-        cached_data = await self.cache.get(cache_key)
-        
-        if cached_data:
-            # Return cached data
-            return ExpenseResponse(**cached_data)
-        
         # Query database
         result = await self.db.execute(
             select(Expense).where(Expense.id == expense_id)
@@ -80,15 +64,12 @@ class ExpenseService:
         expense = result.scalar_one_or_none()
         
         if expense:
-            response = self._to_response(expense)
-            # Cache the result
-            await self.cache.set(cache_key, response.model_dump())
-            return response
+            return self._to_response(expense)
         
         return None
     
     async def update_expense(self, expense_id: int, updates: ExpenseUpdate) -> ExpenseResponse:
-        """Update expense and invalidate caches.
+        """Update expense.
         
         Args:
             expense_id: Expense ID to update
@@ -126,14 +107,10 @@ class ExpenseService:
         await self.db.commit()
         await self.db.refresh(expense)
         
-        # Invalidate caches
-        await self.cache.delete(f"expense:{expense_id}")
-        await self.cache.delete_pattern("expenses:filter:*")
-        
         return self._to_response(expense)
     
     async def delete_expense(self, expense_id: int) -> bool:
-        """Delete expense and invalidate caches.
+        """Delete expense.
         
         Args:
             expense_id: Expense ID to delete
@@ -158,10 +135,6 @@ class ExpenseService:
         await self.db.delete(expense)
         await self.db.commit()
         
-        # Invalidate caches
-        await self.cache.delete(f"expense:{expense_id}")
-        await self.cache.delete_pattern("expenses:filter:*")
-        
         return True
     
     async def list_expenses(self, filters: ExpenseFilter) -> Tuple[List[ExpenseResponse], int]:
@@ -184,15 +157,6 @@ class ExpenseService:
             
         Requirements: 2.1, 2.4, 5.1, 5.2, 5.3, 5.4, 5.5
         """
-        # Generate cache key from filter parameters
-        cache_key = self._generate_filter_cache_key(filters)
-        
-        # Check cache first
-        cached_data = await self.cache.get(cache_key)
-        if cached_data:
-            expenses = [ExpenseResponse(**exp) for exp in cached_data['expenses']]
-            return expenses, cached_data['total']
-        
         # Build query with filters
         query = select(Expense)
         conditions = []
@@ -240,41 +204,7 @@ class ExpenseService:
         # Convert to response models
         expense_responses = [self._to_response(exp) for exp in expenses]
         
-        # Cache the results
-        cache_data = {
-            'expenses': [exp.model_dump() for exp in expense_responses],
-            'total': total_count
-        }
-        await self.cache.set(cache_key, cache_data)
-        
         return expense_responses, total_count
-    
-    def _generate_filter_cache_key(self, filters: ExpenseFilter) -> str:
-        """Generate a cache key from filter parameters.
-        
-        Args:
-            filters: ExpenseFilter with filter parameters
-            
-        Returns:
-            Cache key string
-        """
-        # Create a dictionary of filter parameters
-        filter_dict = {
-            'start_date': filters.start_date.isoformat() if filters.start_date else None,
-            'end_date': filters.end_date.isoformat() if filters.end_date else None,
-            'categories': sorted(filters.categories) if filters.categories else None,
-            'accounts': sorted(filters.accounts) if filters.accounts else None,
-            'min_amount': str(filters.min_amount) if filters.min_amount is not None else None,
-            'max_amount': str(filters.max_amount) if filters.max_amount is not None else None,
-            'page': filters.page,
-            'page_size': filters.page_size
-        }
-        
-        # Generate hash from filter parameters
-        filter_json = json.dumps(filter_dict, sort_keys=True)
-        filter_hash = hashlib.md5(filter_json.encode()).hexdigest()
-        
-        return f"expenses:filter:{filter_hash}"
     
     def _to_response(self, expense: Expense) -> ExpenseResponse:
         """Convert database model to response schema.

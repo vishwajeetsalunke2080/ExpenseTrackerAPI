@@ -15,7 +15,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.database import Base
 from app.config import settings
 # Import all models to ensure they're registered with Base.metadata
-from app.models import expense  # noqa: F401
+from app.models import (  # noqa: F401
+    expense,
+    user,
+    oauth_account,
+    refresh_token,
+    email_verification,
+    password_reset,
+    auth_log,
+    rate_limit,
+    account_lock
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -23,7 +33,9 @@ config = context.config
 
 # Override sqlalchemy.url with the one from settings
 # Convert async URL to sync URL for Alembic
-sync_database_url = settings.database_url.replace("+aiosqlite", "").replace("sqlite+aiosqlite", "sqlite")
+sync_database_url = settings.database_url.replace("+asyncpg", "").replace("postgresql+asyncpg", "postgresql").replace("+aiosqlite", "").replace("sqlite+aiosqlite", "sqlite")
+# Convert ssl=require to sslmode=require for psycopg2
+sync_database_url = sync_database_url.replace("ssl=require", "sslmode=require")
 config.set_main_option("sqlalchemy.url", sync_database_url)
 
 # Interpret the config file for Python logging.

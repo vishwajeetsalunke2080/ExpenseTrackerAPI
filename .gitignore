@@ -15,6 +15,9 @@ pyvenv.cfg
 .env
 .env.local
 
+# RSA Keys (JWT signing)
+private_key.pem
+
 # Database
 *.db
 *.sqlite

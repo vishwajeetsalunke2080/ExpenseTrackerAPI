@@ -7,9 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import ValidationError
 
 from app.database import get_db
-from app.cache import get_redis
 from app.services.income_service import IncomeService
-from app.services.cache_service import CacheService
 from app.schemas.income import IncomeCreate, IncomeUpdate, IncomeResponse
 from app.schemas.filter import ExpenseFilter
 
@@ -18,20 +16,17 @@ router = APIRouter(prefix="/income", tags=["income"])
 
 
 async def get_income_service(
-    db: AsyncSession = Depends(get_db),
-    redis_client = Depends(get_redis)
+    db: AsyncSession = Depends(get_db)
 ) -> IncomeService:
     """Dependency injection for IncomeService.
     
     Args:
         db: Database session from dependency
-        redis_client: Redis client from dependency
         
     Returns:
         IncomeService instance
     """
-    cache_service = CacheService(redis_client)
-    return IncomeService(db, cache_service)
+    return IncomeService(db)
 
 
 @router.post("", response_model=IncomeResponse, status_code=status.HTTP_201_CREATED)

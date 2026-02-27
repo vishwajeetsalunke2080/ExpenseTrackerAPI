@@ -1,32 +1,27 @@
-"""Income service for managing income CRUD operations with caching."""
+"""Income service for managing income CRUD operations."""
 from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from decimal import Decimal
-import hashlib
-import json
 
 from app.models.expense import Income
 from app.schemas.income import IncomeCreate, IncomeUpdate, IncomeResponse
 from app.schemas.filter import ExpenseFilter
-from app.services.cache_service import CacheService
 
 
 class IncomeService:
-    """Service for income CRUD operations with caching support."""
+    """Service for income CRUD operations."""
     
-    def __init__(self, db: AsyncSession, cache: CacheService):
-        """Initialize income service with database session and cache.
+    def __init__(self, db: AsyncSession):
+        """Initialize income service with database session.
         
         Args:
             db: Async SQLAlchemy database session
-            cache: Cache service for Redis operations
         """
         self.db = db
-        self.cache = cache
     
     async def create_income(self, income_data: IncomeCreate) -> IncomeResponse:
-        """Create a new income record and invalidate relevant caches.
+        """Create a new income record.
         
         Args:
             income_data: Income creation data
@@ -48,13 +43,10 @@ class IncomeService:
         await self.db.commit()
         await self.db.refresh(db_income)
         
-        # Invalidate list caches since we added a new income
-        await self.cache.delete_pattern("income:filter:*")
-        
         return self._to_response(db_income)
     
     async def get_income(self, income_id: int) -> Optional[IncomeResponse]:
-        """Retrieve income by ID with caching.
+        """Retrieve income by ID.
         
         Args:
             income_id: Income ID
@@ -64,14 +56,6 @@ class IncomeService:
             
         Requirements: 13.5
         """
-        # Check cache first
-        cache_key = f"income:{income_id}"
-        cached_data = await self.cache.get(cache_key)
-        
-        if cached_data:
-            # Return cached data
-            return IncomeResponse(**cached_data)
-        
         # Query database
         result = await self.db.execute(
             select(Income).where(Income.id == income_id)
@@ -79,15 +63,12 @@ class IncomeService:
         income = result.scalar_one_or_none()
         
         if income:
-            response = self._to_response(income)
-            # Cache the result
-            await self.cache.set(cache_key, response.model_dump())
-            return response
+            return self._to_response(income)
         
         return None
     
     async def update_income(self, income_id: int, updates: IncomeUpdate) -> IncomeResponse:
-        """Update income and invalidate caches.
+        """Update income.
         
         Args:
             income_id: Income ID to update
@@ -123,14 +104,10 @@ class IncomeService:
         await self.db.commit()
         await self.db.refresh(income)
         
-        # Invalidate caches
-        await self.cache.delete(f"income:{income_id}")
-        await self.cache.delete_pattern("income:filter:*")
-        
         return self._to_response(income)
     
     async def delete_income(self, income_id: int) -> bool:
-        """Delete income and invalidate caches.
+        """Delete income.
         
         Args:
             income_id: Income ID to delete
@@ -155,10 +132,6 @@ class IncomeService:
         await self.db.delete(income)
         await self.db.commit()
         
-        # Invalidate caches
-        await self.cache.delete(f"income:{income_id}")
-        await self.cache.delete_pattern("income:filter:*")
-        
         return True
     
     async def list_income(self, filters: ExpenseFilter) -> Tuple[List[IncomeResponse], int]:
@@ -180,15 +153,6 @@ class IncomeService:
             
         Requirements: 13.4, 13.8
         """
-        # Generate cache key from filter parameters
-        cache_key = self._generate_filter_cache_key(filters)
-        
-        # Check cache first
-        cached_data = await self.cache.get(cache_key)
-        if cached_data:
-            income_records = [IncomeResponse(**inc) for inc in cached_data['income']]
-            return income_records, cached_data['total']
-        
         # Build query with filters
         query = select(Income)
         conditions = []
@@ -232,40 +196,7 @@ class IncomeService:
         # Convert to response models
         income_responses = [self._to_response(inc) for inc in income_records]
         
-        # Cache the results
-        cache_data = {
-            'income': [inc.model_dump() for inc in income_responses],
-            'total': total_count
-        }
-        await self.cache.set(cache_key, cache_data)
-        
         return income_responses, total_count
-    
-    def _generate_filter_cache_key(self, filters: ExpenseFilter) -> str:
-        """Generate a cache key from filter parameters.
-        
-        Args:
-            filters: ExpenseFilter with filter parameters
-            
-        Returns:
-            Cache key string
-        """
-        # Create a dictionary of filter parameters
-        filter_dict = {
-            'start_date': filters.start_date.isoformat() if filters.start_date else None,
-            'end_date': filters.end_date.isoformat() if filters.end_date else None,
-            'categories': sorted(filters.categories) if filters.categories else None,
-            'min_amount': str(filters.min_amount) if filters.min_amount is not None else None,
-            'max_amount': str(filters.max_amount) if filters.max_amount is not None else None,
-            'page': filters.page,
-            'page_size': filters.page_size
-        }
-        
-        # Generate hash from filter parameters
-        filter_json = json.dumps(filter_dict, sort_keys=True)
-        filter_hash = hashlib.md5(filter_json.encode()).hexdigest()
-        
-        return f"income:filter:{filter_hash}"
     
     def _to_response(self, income: Income) -> IncomeResponse:
         """Convert database model to response schema.

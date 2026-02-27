@@ -2,12 +2,13 @@
 Expense Tracking and Analytics API
 
 A FastAPI-based web service for managing personal or business expenses with
-full CRUD operations, advanced filtering, AI-powered analytics, and caching.
+full CRUD operations, advanced filtering, and AI-powered analytics.
 """
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
@@ -17,7 +18,6 @@ load_dotenv()
 # Import configuration
 from app.config import settings
 from app.database import init_db, AsyncSessionLocal, initialize_default_categories, initialize_default_account_types
-from app.cache import close_redis
 
 # Configure logging
 logging.basicConfig(
@@ -35,7 +35,6 @@ async def lifespan(app: FastAPI):
     Handles:
     - Database initialization and table creation
     - Default categories and account types initialization
-    - Redis connection cleanup on shutdown
     """
     logger.info("Starting up Expense Tracking API...")
     logger.info(f"Database URL: {settings.database_url[:50]}...")  # Log first 50 chars for security
@@ -64,12 +63,6 @@ async def lifespan(app: FastAPI):
     
     # Shutdown: cleanup resources
     logger.info("Shutting down...")
-    try:
-        await close_redis()
-        logger.info("Redis connection closed")
-    except Exception as e:
-        logger.error(f"Error closing Redis connection: {e}")
-    
     logger.info("Shutdown complete")
 
 
@@ -82,7 +75,85 @@ app = FastAPI(
 )
 
 
+# Configure CORS middleware for authentication endpoints
+# Requirements: 6.1, 6.2, 6.3, 6.4
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:8000"],  # Frontend origins
+    allow_credentials=True,  # Allow cookies for token storage
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers including Authorization
+    expose_headers=["*"]  # Expose all headers to frontend
+)
+
+
+# Add authentication middleware for route protection
+# Requirements: 6.1, 6.2, 6.3, 6.4, 6.6
+from app.middleware.auth import AuthMiddleware
+
+app.add_middleware(
+    AuthMiddleware,
+    public_paths=[
+        "/",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/auth/signup",
+        "/auth/signin",
+        "/auth/oauth/.*",
+        "/auth/forgot-password",
+        "/auth/reset-password",
+        "/auth/verify-email",
+        "/auth/resend-verification",
+        "/auth/refresh"
+    ]
+)
+
+
 # Global exception handlers
+from app.exceptions.auth_exceptions import (
+    AuthException,
+    InvalidCredentialsError,
+    EmailNotVerifiedError,
+    TokenExpiredError,
+    TokenInvalidError,
+    AccountLockedError,
+    RateLimitError,
+    ValidationError as AuthValidationError,
+    UserNotFoundError,
+    DuplicateEmailError,
+    TokenRevokedError,
+    PasswordStrengthError,
+    OAuthProviderError
+)
+
+
+@app.exception_handler(AuthException)
+async def auth_exception_handler(request: Request, exc: AuthException):
+    """
+    Handle all authentication-related exceptions.
+    
+    Returns consistent JSON error responses with detail, error_code, and timestamp.
+    Logs all exceptions with full context for debugging and security monitoring.
+    """
+    # Log with appropriate level based on status code
+    log_message = f"Auth error on {request.url.path}: {exc.error_code} - {exc.message}"
+    
+    if exc.status_code >= 500:
+        logger.error(log_message, exc_info=True)
+    elif exc.status_code == 429:  # Rate limit
+        logger.warning(log_message)
+    elif exc.status_code in (401, 403):  # Unauthorized/Forbidden
+        logger.info(log_message)
+    else:
+        logger.warning(log_message)
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.to_dict()
+    )
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """
@@ -128,6 +199,9 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 # Include API routers
+from app.api.auth import router as auth_router
+from app.api.oauth import router as oauth_router
+from app.api.users import router as users_router
 from app.api.categories import router as categories_router
 from app.api.accounts import router as accounts_router
 from app.api.expenses import router as expenses_router
@@ -136,6 +210,9 @@ from app.api.budgets import router as budgets_router
 from app.api.analytics import router as analytics_router
 from app.api.balance_carryforward import router as balance_router
 
+app.include_router(auth_router)
+app.include_router(oauth_router)
+app.include_router(users_router)
 app.include_router(categories_router)
 app.include_router(accounts_router)
 app.include_router(expenses_router)

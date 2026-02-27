@@ -5,26 +5,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from groq import AsyncGroq
 
 from app.database import get_db
-from app.cache import get_redis
 from app.config import settings
 from app.services.analytics_engine import AnalyticsEngine
 from app.services.expense_service import ExpenseService
 from app.services.income_service import IncomeService
-from app.services.cache_service import CacheService
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 async def get_analytics_engine(
-    db: AsyncSession = Depends(get_db),
-    redis_client = Depends(get_redis)
+    db: AsyncSession = Depends(get_db)
 ) -> AnalyticsEngine:
     """Dependency injection for AnalyticsEngine.
     
     Args:
         db: Database session from dependency
-        redis_client: Redis client from dependency
         
     Returns:
         AnalyticsEngine instance
@@ -33,9 +29,8 @@ async def get_analytics_engine(
     groq_client = AsyncGroq(api_key=settings.groq_api_key)
     
     # Initialize services
-    cache_service = CacheService(redis_client)
-    expense_service = ExpenseService(db, cache_service)
-    income_service = IncomeService(db, cache_service)
+    expense_service = ExpenseService(db)
+    income_service = IncomeService(db)
     
     return AnalyticsEngine(groq_client, expense_service, income_service, model=settings.groq_model)
 
