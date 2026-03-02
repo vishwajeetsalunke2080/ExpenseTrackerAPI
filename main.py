@@ -17,7 +17,7 @@ load_dotenv()
 
 # Import configuration
 from app.config import settings
-from app.database import init_db
+from app.database import init_db, AsyncSessionLocal, initialize_default_categories, initialize_default_account_types
 
 # Configure logging
 logging.basicConfig(
@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
     
     Handles:
     - Database initialization and table creation
+    - Default categories and account types initialization
     """
     logger.info("Starting up Expense Tracking API...")
     logger.info(f"Database URL: {settings.database_url[:50]}...")  # Log first 50 chars for security
@@ -44,6 +45,16 @@ async def lifespan(app: FastAPI):
         logger.info("Database tables initialized")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
+        raise
+    
+    # Initialize default categories and account types
+    try:
+        async with AsyncSessionLocal() as session:
+            await initialize_default_categories(session)
+            await initialize_default_account_types(session)
+        logger.info("Default categories and account types initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize defaults: {e}")
         raise
     
     logger.info("Startup complete")

@@ -36,7 +36,7 @@ async def get_analytics_engine(
     expense_service = ExpenseService(db, current_user)
     income_service = IncomeService(db, current_user)
     
-    return AnalyticsEngine(groq_client, expense_service, income_service, model=settings.groq_model)
+    return AnalyticsEngine(groq_client, expense_service, income_service, current_user, model=settings.groq_model)
 
 
 @router.post("/query", response_model=Dict[str, Any])

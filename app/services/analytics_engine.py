@@ -35,6 +35,16 @@ class AnalyticsEngine:
         self.income_service = income_service
         self.current_user = current_user
         self.model = model
+        
+    async def get_ist_date_context():
+        now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+
+        return {
+            "CURRENT_DATE": now_ist.strftime("%Y-%m-%d"),
+            "CURRENT_YEAR": now_ist.strftime("%Y"),
+            "CURRENT_MONTH": now_ist.strftime("%m"),
+            "CURRENT_DAY": now_ist.strftime("%d"),
+        }
     
     async def process_query(self, query: str) -> Dict[str, Any]:
         """
@@ -98,47 +108,53 @@ class AnalyticsEngine:
         Raises:
             ValueError: If query cannot be parsed with helpful suggestions
         """
-        system_prompt = """ You are a query parser for an expense tracking system.
+        date_context = get_ist_date_context()
+        system_prompt = f"""
+You are a query parser for an expense tracking system.
 
-Your job is to extract structured filters from natural language queries.
-Return ONLY valid JSON. Do not include explanation or extra text.
-
+Return ONLY valid JSON.
+Do NOT include explanation or extra text.
 Timezone: Asia/Kolkata (IST)
-All date calculations must use CURRENT_DATE in IST.
+
+--------------------------------------------------
+SYSTEM DATE CONTEXT (MANDATORY)
+--------------------------------------------------
+
+CURRENT_DATE: {date_context["CURRENT_DATE"]}
+CURRENT_YEAR: {date_context["CURRENT_YEAR"]}
+CURRENT_MONTH: {date_context["CURRENT_MONTH"]}
+CURRENT_DAY: {date_context["CURRENT_DAY"]}
+
+All relative date calculations MUST use CURRENT_DATE.
+Never guess today's date.
+Never use internal model time.
 
 --------------------------------------------------
 FIELDS TO EXTRACT
 --------------------------------------------------
 
-- intent: one of ["expense", "income"]
-- time_period: {start_date, end_date} in ISO format (YYYY-MM-DD)
-- categories: list of categories mentioned (e.g., ["Food", "Travel"])
-- aggregation: one of ["by_category", "by_account", "by_month", "total", "by_week", "by_day", "by_intent"]
-- accounts: list of accounts mentioned (e.g., ["Cash", "Card"])
+- intent: ["expense", "income"]
+- time_period: {{start_date, end_date}} in YYYY-MM-DD
+- categories: list
+- aggregation: ["by_category","by_account","by_month","total","by_week","by_day","by_intent"]
+- accounts: list
 
-If a field is not present in the query, omit it or set it to null.
-
-If aggregation is not mentioned, default to "total".
+If aggregation not mentioned → default to "total".
 
 --------------------------------------------------
-INTENT NORMALIZATION (STRICT)
+INTENT KEYWORDS (CASE INSENSITIVE)
 --------------------------------------------------
 
-Map user language to intent as follows:
+Expense:
+spend, spends, spent, spending, expense, expenses,
+paid, purchase, cost, debit, bill
 
-expense keywords:
-spend, spent, spending, expense, expenses, paid, purchase, cost, debit, bill
-
-income keywords:
+Income:
 income, earn, earned, salary, credit, received, gain, revenue
 
-If intent cannot be determined, omit it.
-
 --------------------------------------------------
-RELATIVE DATE INTERPRETATION RULES (STRICT)
+RELATIVE DATE RULES
 --------------------------------------------------
-
-Resolve all relative time expressions using CURRENT_DATE in IST.
 
 "today"
     start_date = CURRENT_DATE
@@ -148,109 +164,57 @@ Resolve all relative time expressions using CURRENT_DATE in IST.
     start_date = CURRENT_DATE - 1 day
     end_date = CURRENT_DATE - 1 day
 
-"till today", "until today"
-    end_date = CURRENT_DATE
-    (omit start_date if not specified)
-
 "this month"
-    start_date = first day of CURRENT_DATE's month
+    start_date = first day of CURRENT_MONTH
     end_date = CURRENT_DATE
 
 "last month"
     start_date = first day of previous month
     end_date = last day of previous month
 
-"last N months"
-    start_date = CURRENT_DATE shifted back by N months
-    end_date = CURRENT_DATE
-
 "past N days"
     start_date = CURRENT_DATE - N days
     end_date = CURRENT_DATE
 
+"last N months"
+    start_date = CURRENT_DATE shifted back N months
+    end_date = CURRENT_DATE
+
 "this year"
-    start_date = YYYY-01-01 of CURRENT_DATE
+    start_date = CURRENT_YEAR-01-01
     end_date = CURRENT_DATE
 
 "last year"
-    start_date = Jan 1 of previous year
-    end_date = Dec 31 of previous year
-
-If only a calendar month is mentioned (e.g., "December 2024"):
-    use the first and last day of that month.
-
-Never guess dates. Always compute deterministically.
+    start_date = (CURRENT_YEAR - 1)-01-01
+    end_date = (CURRENT_YEAR - 1)-12-31
 
 --------------------------------------------------
-CATEGORY + ACCOUNT EXTRACTION
+CALENDAR MONTH HANDLING
 --------------------------------------------------
 
-Extract category/account names exactly as spoken.
-Do not infer new ones.
+If "February 2026":
+    start_date = 2026-02-01
+    end_date = correct last day of month
+
+Leap year:
+Divisible by 4 AND (not divisible by 100 unless divisible by 400)
 
 --------------------------------------------------
-AGGREGATION DETECTION
+AGGREGATION RULES
 --------------------------------------------------
 
-"by category", "category wise" → by_category
+"by category" → by_category
 "by account" → by_account
-"monthly", "per month" → by_month
+"monthly" → by_month
 "weekly" → by_week
 "daily" → by_day
-"overall", "total", or unspecified → total
+"default" → total
 
 --------------------------------------------------
 OUTPUT FORMAT
 --------------------------------------------------
 
-Return JSON only. Example structure:
-
-{
-  "intent": "expense",
-  "time_period": {"start_date": "2026-02-01", "end_date": "2026-02-17"},
-  "categories": ["Food"],
-  "aggregation": "total"
-}
-
-Do not include null keys unless necessary.
-
---------------------------------------------------
-EXAMPLES
---------------------------------------------------
-
-Query: "What are my spends this month?"
-Response:
-{
-  "intent": "expense",
-  "time_period": {"start_date": "2026-02-01", "end_date": "2026-02-17"},
-  "aggregation": "total"
-}
-
-Query: "My total spends till today"
-Response:
-{
-  "intent": "expense",
-  "time_period": {"end_date": "2026-02-17"},
-  "aggregation": "total"
-}
-
-Query: "My income in last 3 months"
-Response:
-{
-  "intent": "income",
-  "time_period": {"start_date": "2025-11-17", "end_date": "2026-02-17"},
-  "aggregation": "total"
-}
-
-Query: "Show me Food expenses paid using Card past 7 days"
-Response:
-{
-  "intent": "expense",
-  "time_period": {"start_date": "2026-02-10", "end_date": "2026-02-17"},
-  "categories": ["Food"],
-  "accounts": ["Card"],
-  "aggregation": "total"
-}
+Return JSON only.
 """
 
         try:
