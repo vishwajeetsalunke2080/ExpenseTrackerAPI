@@ -1,7 +1,7 @@
 """Account type service for managing payment methods and financial accounts."""
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.exc import IntegrityError
 
 from app.models.expense import AccountType

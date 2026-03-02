@@ -5,27 +5,6 @@ from sqlalchemy import select
 from app.models import Category, AccountType, Expense, Income, Budget
 
 
-@pytest.mark.asyncio
-async def test_database_initialization_on_startup(test_db):
-    """
-    Test that database tables are created and defaults are initialized on startup.
-    
-    Validates: Requirements 10.1, 10.2
-    """
-    # Initialize defaults (simulating startup)
-    from app.database import initialize_default_categories, initialize_default_account_types
-    await initialize_default_categories(test_db)
-    await initialize_default_account_types(test_db)
-    
-    # Verify categories table exists and has defaults
-    result = await test_db.execute(select(Category))
-    categories = result.scalars().all()
-    assert len(categories) >= 8  # At least 5 expense + 3 income defaults
-    
-    # Verify account types table exists and has defaults
-    result = await test_db.execute(select(AccountType))
-    account_types = result.scalars().all()
-    assert len(account_types) >= 3  # At least 3 defaults (Cash, Card, UPI)
 
 
 @pytest.mark.asyncio

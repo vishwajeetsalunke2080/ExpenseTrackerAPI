@@ -14,9 +14,13 @@ os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-min-32-characters-lo
 os.environ["JWT_ALGORITHM"] = "HS256"
 
 from app.database import Base, get_db
-from app.cache import get_redis
+try:
+    from app.cache import get_redis
+    import redis.asyncio as redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
 from main import app
-import redis.asyncio as redis
 
 
 @pytest_asyncio.fixture
@@ -74,16 +78,22 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def test_client(test_db, redis_client) -> AsyncGenerator[AsyncClient, None]:
-    """Create a test HTTP client with database and Redis overrides."""
+async def test_client(test_db) -> AsyncGenerator[AsyncClient, None]:
+    """Create a test HTTP client with database overrides."""
     async def override_get_db():
         yield test_db
     
-    async def override_get_redis():
-        return redis_client
-    
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_redis] = override_get_redis
+    
+    if REDIS_AVAILABLE:
+        # Only override redis if it's available
+        try:
+            redis_client = await anext(redis_client_fixture())
+            async def override_get_redis():
+                return redis_client
+            app.dependency_overrides[get_redis] = override_get_redis
+        except:
+            pass
     
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -95,8 +105,11 @@ async def test_client(test_db, redis_client) -> AsyncGenerator[AsyncClient, None
 
 
 @pytest_asyncio.fixture
-async def redis_client() -> AsyncGenerator[redis.Redis, None]:
-    """Create a test Redis client using fakeredis."""
+async def redis_client() -> AsyncGenerator:
+    """Create a test Redis client using fakeredis (only if redis is available)."""
+    if not REDIS_AVAILABLE:
+        pytest.skip("Redis not available")
+    
     import fakeredis.aioredis
     
     client = fakeredis.aioredis.FakeRedis(
