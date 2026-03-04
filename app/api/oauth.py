@@ -7,10 +7,12 @@ callback processing.
 Requirements: 3.1, 3.2, 3.3, 3.4, 3.5
 """
 import secrets
+import logging
 from typing import Dict
 from fastapi import APIRouter, Query, HTTPException, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.database import get_db
 from app.config import settings
@@ -19,6 +21,7 @@ from app.services.token_service import TokenService
 from app.schemas.auth import TokenResponse
 
 router = APIRouter(prefix="/auth/oauth", tags=["oauth"])
+logger = logging.getLogger(__name__)
 
 
 def get_oauth_service(provider: str) -> OAuthService:
@@ -111,6 +114,10 @@ async def oauth_callback(
     creating or linking a user account. Redirects back to frontend with
     JWT tokens in query parameters.
     
+    TRANSACTION BOUNDARY: The authenticate_or_create_user call manages a database
+    transaction that atomically creates users, OAuth accounts, and default data.
+    The get_db() dependency commits on success or rolls back on failure.
+    
     Args:
         provider: OAuth provider name ('google' or 'github')
         code: Authorization code from OAuth provider
@@ -141,7 +148,7 @@ async def oauth_callback(
         expires_in = token_response.get("expires_in")
         
         if not provider_access_token:
-            # Redirect to frontend with error
+            logger.error(f"OAuth token exchange failed for provider {provider}: No access token in response")
             error_url = f"{settings.frontend_url}/auth/callback?error=token_exchange_failed"
             return RedirectResponse(url=error_url, status_code=302)
         
@@ -154,20 +161,37 @@ async def oauth_callback(
         name = user_info.get("name")
         
         if not provider_user_id or not email:
-            # Redirect to frontend with error
+            logger.error(f"OAuth user info incomplete for provider {provider}: provider_user_id={provider_user_id}, email={email}")
             error_url = f"{settings.frontend_url}/auth/callback?error=user_info_failed"
             return RedirectResponse(url=error_url, status_code=302)
         
-        # Authenticate or create user
-        user = await oauth_service.authenticate_or_create_user(
-            provider_user_id=provider_user_id,
-            email=email,
-            name=name,
-            access_token=provider_access_token,
-            refresh_token=provider_refresh_token,
-            expires_in=expires_in,
-            db=db
-        )
+        # Authenticate or create user with proper error handling
+        try:
+            user = await oauth_service.authenticate_or_create_user(
+                provider_user_id=provider_user_id,
+                email=email,
+                name=name,
+                access_token=provider_access_token,
+                refresh_token=provider_refresh_token,
+                expires_in=expires_in,
+                db=db
+            )
+            
+            # Check if this is a new user or existing user
+            # Note: We can't reliably detect this after the fact, but we can log the operation
+            logger.info(f"OAuth authentication successful for {provider} user {email}")
+            
+        except IntegrityError as e:
+            # Database constraint violation (should be handled in service, but catch here as safety)
+            logger.error(f"Database integrity error during OAuth authentication for {provider} user {email}: {str(e)}")
+            error_url = f"{settings.frontend_url}/auth/callback?error=database_error&message=Account linking failed"
+            return RedirectResponse(url=error_url, status_code=302)
+        
+        except SQLAlchemyError as e:
+            # Database error during user creation or onboarding
+            logger.error(f"Database error during OAuth authentication for {provider} user {email}: {str(e)}")
+            error_url = f"{settings.frontend_url}/auth/callback?error=database_error&message=Failed to create or link account"
+            return RedirectResponse(url=error_url, status_code=302)
         
         # Generate JWT tokens for our application
         token_service = TokenService(
@@ -185,9 +209,11 @@ async def oauth_callback(
         
     except ValueError as e:
         # OAuth provider error - redirect to frontend with error
+        logger.error(f"OAuth provider error for {provider}: {str(e)}")
         error_url = f"{settings.frontend_url}/auth/callback?error=oauth_failed&message={str(e)}"
         return RedirectResponse(url=error_url, status_code=302)
     except Exception as e:
         # Unexpected error - redirect to frontend with error
+        logger.exception(f"Unexpected error during OAuth callback for {provider}: {str(e)}")
         error_url = f"{settings.frontend_url}/auth/callback?error=internal_error&message={str(e)}"
         return RedirectResponse(url=error_url, status_code=302)

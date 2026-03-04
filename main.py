@@ -47,15 +47,9 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize database: {e}")
         raise
     
-    # Initialize default categories and account types
-    try:
-        async with AsyncSessionLocal() as session:
-            await initialize_default_categories(session)
-            await initialize_default_account_types(session)
-        logger.info("Default categories and account types initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize defaults: {e}")
-        raise
+    # Default categories and account types are now created per-user during signup
+    # No longer initializing system-wide defaults at startup
+    logger.info("Skipping system-wide default initialization (user-specific defaults created at signup)")
     
     logger.info("Startup complete")
     

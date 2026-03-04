@@ -123,7 +123,7 @@ class TokenService:
         )
         
         db.add(refresh_token)
-        await db.commit()
+        await db.flush()  # Flush to get the token ID, but don't commit
         await db.refresh(refresh_token)
         
         return token
@@ -219,7 +219,7 @@ class TokenService:
         
         # Revoke the old refresh token (token rotation)
         token_record.is_revoked = True
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
         
         # Generate new tokens
         new_access_token = self.generate_access_token(user.id, user.email)
@@ -251,7 +251,7 @@ class TokenService:
             raise ValueError("Refresh token not found")
         
         token_record.is_revoked = True
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
     
     async def revoke_all_user_tokens(self, user_id: int, db: AsyncSession) -> None:
         """Revoke all refresh tokens for a specific user.
@@ -291,7 +291,7 @@ class TokenService:
         for token in tokens:
             token.is_revoked = True
         
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
     
     def generate_verification_token(self) -> str:
         """Generate a secure random token for email verification.

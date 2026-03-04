@@ -80,7 +80,7 @@ async def log_auth_attempt(
         user_agent=user_agent
     )
     db.add(log_entry)
-    await db.commit()
+    # Don't commit here - let the endpoint's get_db dependency handle it
 
 
 
@@ -92,16 +92,25 @@ async def signup(
 ):
     """Register a new user account.
     
+    Transaction Management:
+    - All operations (user creation, onboarding, email verification) occur within
+      a single database transaction managed by the get_db() dependency
+    - On success: get_db() auto-commits all changes atomically
+    - On failure: get_db() auto-rolls back all changes, ensuring no partial user records
+    
     Requirements: 1.1, 1.2, 1.5
     """
     from app.services.user_onboarding_service import UserOnboardingService
+    from sqlalchemy.exc import SQLAlchemyError
     
     auth_service = AuthService()
     email_service = EmailService()
     ip_address = get_client_ip(request)
     user_agent = get_user_agent(request)
     
+    # Transaction boundary: START (managed by get_db dependency)
     try:
+        # Step 1: Create user account
         user = await auth_service.create_user(
             email=user_data.email,
             password=user_data.password,
@@ -112,10 +121,22 @@ async def signup(
         result = await db.execute(select(User).where(User.id == user.id))
         user = result.scalar_one()
         
-        # Initialize default categories and account types for new user
-        onboarding_service = UserOnboardingService(db)
-        await onboarding_service.initialize_user_defaults(user.id)
+        # Step 2: Initialize default categories and account types for new user
+        try:
+            onboarding_service = UserOnboardingService(db)
+            await onboarding_service.initialize_user_defaults(user.id)
+        except SQLAlchemyError as onboarding_error:
+            # Onboarding failure - transaction will be rolled back by get_db()
+            await log_auth_attempt(
+                db=db, email=user_data.email, action="signup", success=False,
+                ip_address=ip_address, user_agent=user_agent
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to initialize user account defaults. Please try again."
+            ) from onboarding_error
         
+        # Step 3: Send verification email (non-critical, doesn't affect transaction)
         from app.models.email_verification import EmailVerificationToken
         token_result = await db.execute(
             select(EmailVerificationToken)
@@ -132,6 +153,7 @@ async def signup(
                     token=verification_token.token
                 )
             except Exception:
+                # Email sending failure doesn't affect signup success
                 pass
         
         await log_auth_attempt(
@@ -139,9 +161,11 @@ async def signup(
             ip_address=ip_address, user_agent=user_agent, user_id=user.id
         )
         
+        # Transaction boundary: END - get_db() will commit all changes
         return user
         
     except ValueError as e:
+        # User creation failure (e.g., email already exists, validation error)
         await log_auth_attempt(
             db=db, email=user_data.email, action="signup", success=False,
             ip_address=ip_address, user_agent=user_agent
@@ -156,8 +180,19 @@ async def signup(
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_msg
+                detail=f"User creation failed: {error_msg}"
             )
+    except SQLAlchemyError as db_error:
+        # Database error during user creation
+        await log_auth_attempt(
+            db=db, email=user_data.email, action="signup", success=False,
+            ip_address=ip_address, user_agent=user_agent
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error during user creation. Please try again."
+        ) from db_error
+    # Transaction boundary: ROLLBACK - get_db() will rollback on any exception
 
 
 

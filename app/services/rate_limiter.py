@@ -89,7 +89,7 @@ class RateLimiterService:
             created_at=datetime.now(timezone.utc)
         )
         db.add(attempt)
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
         
         # Count total attempts within the window
         window_start = datetime.now(timezone.utc) - timedelta(minutes=self.SIGNIN_WINDOW_MINUTES)
@@ -143,7 +143,7 @@ class RateLimiterService:
             )
             db.add(lock)
         
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
     
     async def is_account_locked(self, email: str, db: AsyncSession) -> bool:
         """Check if an account is currently locked.
@@ -180,7 +180,7 @@ class RateLimiterService:
         if locked_until <= now:
             # Lock has expired, remove it
             await db.delete(lock)
-            await db.commit()
+            await db.flush()  # Flush the delete but don't commit
             return False
         
         return True
@@ -233,7 +233,7 @@ class RateLimiterService:
             created_at=datetime.now(timezone.utc)
         )
         db.add(attempt)
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
     
     async def cleanup_expired_attempts(self, db: AsyncSession, days: int = 7) -> None:
         """Clean up old rate limit attempts from the database.
@@ -252,4 +252,4 @@ class RateLimiterService:
                 RateLimitAttempt.created_at < cutoff_date
             )
         )
-        await db.commit()
+        await db.flush()  # Flush the cleanup but don't commit

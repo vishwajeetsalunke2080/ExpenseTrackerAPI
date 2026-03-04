@@ -5,6 +5,5 @@ from .expense_service import ExpenseService
 from .income_service import IncomeService
 from .budget_service import BudgetService
 from .analytics_engine import AnalyticsEngine
-from .cache_service import CacheService
 
-__all__ = ["CategoryService", "AccountTypeService", "ExpenseService", "IncomeService", "BudgetService", "AnalyticsEngine", "CacheService"]
+__all__ = ["CategoryService", "AccountTypeService", "ExpenseService", "IncomeService", "BudgetService", "AnalyticsEngine"]

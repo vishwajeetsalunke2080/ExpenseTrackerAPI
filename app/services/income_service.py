@@ -43,7 +43,7 @@ class IncomeService:
         )
         
         self.db.add(db_income)
-        await self.db.commit()
+        await self.db.flush()  # Flush to get ID but don't commit
         await self.db.refresh(db_income)
         
         return self._to_response(db_income)
@@ -114,7 +114,7 @@ class IncomeService:
         if updates.notes is not None:
             income.notes = updates.notes
         
-        await self.db.commit()
+        # Don't commit here - let get_db dependency handle it
         await self.db.refresh(income)
         
         return self._to_response(income)
@@ -148,7 +148,7 @@ class IncomeService:
             raise ValueError(f"Income with id {income_id} not found")
         
         await self.db.delete(income)
-        await self.db.commit()
+        # Don't commit here - let get_db dependency handle it
         
         return True
     

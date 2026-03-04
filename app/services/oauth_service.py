@@ -11,9 +11,11 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.models.user import User
 from app.models.oauth_account import OAuthAccount
+from app.services.user_onboarding_service import UserOnboardingService
 
 
 class OAuthService:
@@ -239,6 +241,11 @@ class OAuthService:
         with the email exists and links the OAuth account, or creates
         a new user with the OAuth account.
         
+        TRANSACTION BOUNDARY: All operations (user creation, OAuth account creation,
+        default data initialization) occur within a single transaction managed by
+        the get_db() dependency. The transaction commits on success or rolls back
+        on any failure, ensuring ACID atomicity.
+        
         Args:
             provider_user_id: User ID from OAuth provider
             email: User's email from OAuth provider
@@ -274,13 +281,14 @@ class OAuthService:
             oauth_account.expires_at = expires_at
             oauth_account.updated_at = datetime.now(timezone.utc)
             
-            await db.commit()
-            await db.refresh(oauth_account)
+            # Eagerly load the user to avoid lazy loading issues
+            user_result = await db.execute(
+                select(User).where(User.id == oauth_account.user_id)
+            )
+            user = user_result.scalar_one()
             
-            # Return the linked user
-            user = oauth_account.user
             user.last_login_at = datetime.now(timezone.utc)
-            await db.commit()
+            # Don't commit here - let the endpoint handle it
             
             return user
         
@@ -292,8 +300,72 @@ class OAuthService:
         
         if user:
             # User exists, link OAuth account
+            # TRANSACTION BOUNDARY: OAuth account creation occurs within existing transaction
+            try:
+                new_oauth_account = OAuthAccount(
+                    user_id=user.id,
+                    provider=self.provider,
+                    provider_user_id=provider_user_id,
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                    expires_at=expires_at
+                )
+                
+                db.add(new_oauth_account)
+                
+                # Mark user as verified if OAuth provider verified the email
+                if not user.is_verified:
+                    user.is_verified = True
+                
+                user.last_login_at = datetime.now(timezone.utc)
+                
+                # Don't commit here - let the endpoint handle it
+                await db.refresh(user)
+                
+                return user
+            except IntegrityError:
+                # Race condition: Another request created the OAuth account
+                # Roll back and query for the existing OAuth account
+                await db.rollback()
+                
+                result = await db.execute(
+                    select(OAuthAccount).where(
+                        OAuthAccount.provider == self.provider,
+                        OAuthAccount.provider_user_id == provider_user_id
+                    )
+                )
+                oauth_account = result.scalar_one()
+                
+                # Load and return the user
+                user_result = await db.execute(
+                    select(User).where(User.id == oauth_account.user_id)
+                )
+                user = user_result.scalar_one()
+                
+                return user
+        
+        # User doesn't exist, create new user with OAuth account
+        # TRANSACTION BOUNDARY: User creation, OAuth account creation, and default data
+        # initialization all occur atomically within a single transaction
+        try:
+            new_user = User(
+                email=email,
+                full_name=name,
+                password_hash=None,  # OAuth-only user, no password
+                is_verified=True,  # OAuth providers verify emails
+                is_active=True
+            )
+            
+            db.add(new_user)
+            await db.flush()  # Flush to get user.id for onboarding and OAuth account
+            
+            # Initialize default categories and account types for new user
+            onboarding_service = UserOnboardingService(db)
+            await onboarding_service.initialize_user_defaults(new_user.id)
+            
+            # Create OAuth account linked to new user
             new_oauth_account = OAuthAccount(
-                user_id=user.id,
+                user_id=new_user.id,
                 provider=self.provider,
                 provider_user_id=provider_user_id,
                 access_token=access_token,
@@ -303,42 +375,27 @@ class OAuthService:
             
             db.add(new_oauth_account)
             
-            # Mark user as verified if OAuth provider verified the email
-            if not user.is_verified:
-                user.is_verified = True
+            # Refresh user to ensure all relationships are loaded
+            await db.refresh(new_user)
             
-            user.last_login_at = datetime.now(timezone.utc)
+            return new_user
+        except IntegrityError:
+            # Race condition: Another request created the user or OAuth account
+            # Roll back and query for the existing OAuth account
+            await db.rollback()
             
-            await db.commit()
-            await db.refresh(user)
+            result = await db.execute(
+                select(OAuthAccount).where(
+                    OAuthAccount.provider == self.provider,
+                    OAuthAccount.provider_user_id == provider_user_id
+                )
+            )
+            oauth_account = result.scalar_one()
+            
+            # Load and return the user
+            user_result = await db.execute(
+                select(User).where(User.id == oauth_account.user_id)
+            )
+            user = user_result.scalar_one()
             
             return user
-        
-        # User doesn't exist, create new user with OAuth account
-        new_user = User(
-            email=email,
-            full_name=name,
-            password_hash=None,  # OAuth-only user, no password
-            is_verified=True,  # OAuth providers verify emails
-            is_active=True
-        )
-        
-        db.add(new_user)
-        await db.flush()  # Flush to get user.id
-        
-        # Create OAuth account linked to new user
-        new_oauth_account = OAuthAccount(
-            user_id=new_user.id,
-            provider=self.provider,
-            provider_user_id=provider_user_id,
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_at=expires_at
-        )
-        
-        db.add(new_oauth_account)
-        
-        await db.commit()
-        await db.refresh(new_user)
-        
-        return new_user

@@ -47,7 +47,7 @@ class AccountTypeService:
         
         self.db.add(db_account)
         try:
-            await self.db.commit()
+            await self.db.flush()  # Flush to get ID but don't commit
             await self.db.refresh(db_account)
         except IntegrityError:
             await self.db.rollback()
@@ -128,7 +128,7 @@ class AccountTypeService:
             account.name = updates.name
         
         try:
-            await self.db.commit()
+            await self.db.flush()  # Flush changes but don't commit
             await self.db.refresh(account)
         except IntegrityError:
             await self.db.rollback()
@@ -166,7 +166,7 @@ class AccountTypeService:
             raise ValueError("Cannot delete default account type")
         
         await self.db.delete(account)
-        await self.db.commit()
+        # Don't commit here - let get_db dependency handle it
         
         return True
     
@@ -186,7 +186,7 @@ class AccountTypeService:
                 )
                 self.db.add(account)
         
-        await self.db.commit()
+        await self.db.flush()  # Flush to persist but don't commit
     
     async def _get_by_name(self, name: str) -> Optional[AccountType]:
         """Get account type by name for current user (case-sensitive).

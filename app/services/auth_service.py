@@ -83,7 +83,7 @@ class AuthService:
             # Generate verification token (Requirement 1.5, 7.1)
             verification_token = await self._generate_verification_token(user.id, db)
             
-            await db.commit()
+            # Don't commit here - let the endpoint handle the commit
             await db.refresh(user)
             
             return user
@@ -143,7 +143,7 @@ class AuthService:
         
         # Update last login timestamp
         user.last_login_at = datetime.utcnow()
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
         
         return user
     
@@ -194,7 +194,7 @@ class AuthService:
         user.is_verified = True
         verification_token.used = True
         
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
         
         return True
     
@@ -246,7 +246,7 @@ class AuthService:
         # Generate new verification token
         new_token = await self._generate_verification_token(user.id, db)
         
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
         
         return new_token
     
@@ -291,7 +291,7 @@ class AuthService:
         )
         
         db.add(reset_token)
-        await db.commit()
+        await db.flush()  # Flush to persist but don't commit
         
         return token
     
@@ -368,7 +368,7 @@ class AuthService:
         )
         await token_service.revoke_all_user_tokens(reset_token.user_id, db)
         
-        await db.commit()
+        # Don't commit here - let the endpoint handle it
         
         return True
     

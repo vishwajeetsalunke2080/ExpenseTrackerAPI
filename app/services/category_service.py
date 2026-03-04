@@ -51,7 +51,7 @@ class CategoryService:
         
         self.db.add(db_category)
         try:
-            await self.db.commit()
+            await self.db.flush()  # Flush to get ID but don't commit
             await self.db.refresh(db_category)
         except IntegrityError:
             await self.db.rollback()
@@ -142,7 +142,7 @@ class CategoryService:
             category.name = updates.name
         
         try:
-            await self.db.commit()
+            await self.db.flush()  # Flush changes but don't commit
             await self.db.refresh(category)
         except IntegrityError:
             await self.db.rollback()
@@ -180,7 +180,7 @@ class CategoryService:
             raise ValueError("Cannot delete default category")
         
         await self.db.delete(category)
-        await self.db.commit()
+        # Don't commit here - let get_db dependency handle it
         
         return True
     
@@ -217,7 +217,7 @@ class CategoryService:
                 )
                 self.db.add(category)
         
-        await self.db.commit()
+        await self.db.flush()  # Flush to persist but don't commit
     
     async def _get_by_name(self, name: str) -> Optional[Category]:
         """Get category by name for current user (case-sensitive).

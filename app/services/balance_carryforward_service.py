@@ -134,7 +134,7 @@ class BalanceCarryforwardService:
         )
         
         self.db.add(income_entry)
-        await self.db.commit()
+        await self.db.flush()  # Flush to get ID but don't commit
         await self.db.refresh(income_entry)
         
         return income_entry

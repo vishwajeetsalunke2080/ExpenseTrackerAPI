@@ -63,7 +63,7 @@ class BudgetService:
         )
         
         self.db.add(db_budget)
-        await self.db.commit()
+        await self.db.flush()  # Flush to get ID but don't commit
         await self.db.refresh(db_budget)
         
         return self._to_response(db_budget)
@@ -174,7 +174,7 @@ class BudgetService:
         if updates.amount_limit is not None:
             budget.amount_limit = updates.amount_limit
         
-        await self.db.commit()
+        # Don't commit here - let get_db dependency handle it
         await self.db.refresh(budget)
         
         return self._to_response(budget)
@@ -208,7 +208,7 @@ class BudgetService:
             raise ValueError(f"Budget with id {budget_id} not found")
         
         await self.db.delete(budget)
-        await self.db.commit()
+        # Don't commit here - let get_db dependency handle it
         
         return True
     

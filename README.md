@@ -25,13 +25,11 @@ A production-ready FastAPI-based REST API for expense tracking with user authent
 - **Testing**: Pytest with property-based testing (Hypothesis)
 - **LLM**: Groq API (Llama 3.3)
 - **Email**: SMTP (Gmail)
-- **Caching**: Redis (optional)
 
 ## Prerequisites
 
 - Python 3.12+
 - PostgreSQL 14+ (or SQLite for development)
-- Redis (optional, for caching)
 - SMTP server credentials (for email)
 - Groq API key (for analytics)
 

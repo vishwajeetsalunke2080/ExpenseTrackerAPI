@@ -181,7 +181,7 @@ async def update_profile(
     
     # Commit changes to database
     db.add(current_user)
-    await db.commit()
+    # Don't commit here - let get_db dependency handle it
     await db.refresh(current_user)
     
     # Send verification email if email was changed
@@ -238,7 +238,7 @@ async def change_password(
     
     # Commit changes to database
     db.add(current_user)
-    await db.commit()
+    # Don't commit here - let get_db dependency handle it
     
     return {"message": "Password changed successfully"}
 

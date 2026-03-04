@@ -50,8 +50,17 @@ class UserOnboardingService:
         and account types for a newly registered user. All created entities are marked
         with is_default=True to distinguish them from user-created entries.
         
+        Transaction Management:
+        - This method MUST be called within an existing database transaction
+        - It does NOT commit changes - the caller is responsible for transaction management
+        - All changes will be committed when the caller's transaction commits
+        - If any error occurs, the caller's transaction will rollback all changes atomically
+        
         Args:
             user_id: The ID of the newly created user
+        
+        Raises:
+            SQLAlchemyError: If database operations fail
         """
         # Create expense categories
         for category_name in self.DEFAULT_EXPENSE_CATEGORIES:
@@ -82,4 +91,5 @@ class UserOnboardingService:
             )
             self.db.add(account_type)
         
-        await self.db.commit()
+        # Note: No flush() or commit() here - caller manages transaction lifecycle
+        # This reduces one database round-trip and relies on caller's commit

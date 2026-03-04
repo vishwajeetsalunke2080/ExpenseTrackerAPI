@@ -9,12 +9,25 @@ from app.config import settings
 # Database URL from settings
 DATABASE_URL = settings.database_url
 
-# Create async engine
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,  # Set to False in production
-    future=True
-)
+# Create async engine with connection pool settings
+# SQLite doesn't support pool settings, so we conditionally apply them
+if "sqlite" in DATABASE_URL.lower():
+    engine = create_async_engine(
+        DATABASE_URL,
+        echo=False,
+        future=True,
+    )
+else:
+    engine = create_async_engine(
+        DATABASE_URL,
+        echo=False,  # Set to False in production
+        future=True,
+        pool_size=20,  # Maximum number of connections to keep in the pool
+        max_overflow=10,  # Maximum number of connections that can be created beyond pool_size
+        pool_timeout=30,  # Seconds to wait before giving up on getting a connection
+        pool_recycle=3600,  # Recycle connections after 1 hour to prevent stale connections
+        pool_pre_ping=True,  # Test connections before using them to catch closed connections
+    )
 
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(
