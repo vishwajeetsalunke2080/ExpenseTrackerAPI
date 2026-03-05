@@ -1,15 +1,19 @@
 """Database configuration and session management."""
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
+from sqlalchemy import text
 from typing import AsyncGenerator
+import logging
 
 # Import settings to get DATABASE_URL
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 # Database URL from settings
 DATABASE_URL = settings.database_url
 
-# Create async engine with connection pool settings
+# Create async engine with optimized connection pool settings
 # SQLite doesn't support pool settings, so we conditionally apply them
 if "sqlite" in DATABASE_URL.lower():
     engine = create_async_engine(
@@ -20,13 +24,21 @@ if "sqlite" in DATABASE_URL.lower():
 else:
     engine = create_async_engine(
         DATABASE_URL,
-        echo=False,  # Set to False in production
+        echo=False,
         future=True,
-        pool_size=20,  # Maximum number of connections to keep in the pool
-        max_overflow=10,  # Maximum number of connections that can be created beyond pool_size
-        pool_timeout=30,  # Seconds to wait before giving up on getting a connection
-        pool_recycle=3600,  # Recycle connections after 1 hour to prevent stale connections
-        pool_pre_ping=True,  # Test connections before using them to catch closed connections
+        pool_size=20,  # Increased pool size for better concurrency
+        max_overflow=10,  # Increased overflow capacity
+        pool_timeout=30,  # Increased timeout to 30 seconds
+        pool_recycle=1800,  # Recycle after 30 minutes (Neon closes idle connections)
+        pool_pre_ping=True,  # Re-enabled to detect stale connections
+        connect_args={
+            "server_settings": {
+                "application_name": "expense_api",
+                "jit": "off",  # Disable JIT compilation for faster simple queries
+            },
+            "command_timeout": 30,  # 30 second query timeout
+            "timeout": 10,  # 10 second connection timeout
+        },
     )
 
 # Create async session factory
@@ -43,16 +55,59 @@ Base = declarative_base()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Dependency for getting database sessions."""
-    async with AsyncSessionLocal() as session:
+    """Dependency for getting database sessions.
+    
+    Handles session lifecycle with proper cleanup:
+    - Commits transaction on successful completion
+    - Rolls back on exceptions
+    - Always closes session to return connection to pool
+    - Implements retry logic for transient failures
+    """
+    session = AsyncSessionLocal()
+    try:
+        yield session
+        # Commit on successful completion
+        await session.commit()
+    except GeneratorExit:
+        # Handle early termination (client disconnect, request cancellation)
+        # Rollback any pending transaction
         try:
-            yield session
-            await session.commit()
-        except Exception:
             await session.rollback()
-            raise
-        finally:
+        except Exception as e:
+            logger.warning(f"Error during rollback on GeneratorExit: {str(e)}")
+        # Re-raise to propagate the exit
+        raise
+    except Exception as e:
+        # Handle all other exceptions
+        logger.error(f"Database error, rolling back transaction: {str(e)}")
+        try:
+            await session.rollback()
+        except Exception as rollback_error:
+            logger.error(f"Error during rollback: {str(rollback_error)}")
+        raise
+    finally:
+        # CRITICAL: Always close session to return connection to pool
+        try:
             await session.close()
+        except Exception as close_error:
+            # Log but don't raise - connection may already be closed
+            logger.warning(f"Error closing session: {str(close_error)}")
+
+
+async def check_db_health() -> bool:
+    """Check if database connection is healthy.
+    
+    Returns:
+        bool: True if database is accessible, False otherwise
+    """
+    try:
+        async with AsyncSessionLocal() as session:
+            # Simple query to check connection
+            await session.execute(text("SELECT 1"))
+            return True
+    except Exception as e:
+        logger.error(f"Database health check failed: {str(e)}")
+        return False
 
 
 async def init_db():

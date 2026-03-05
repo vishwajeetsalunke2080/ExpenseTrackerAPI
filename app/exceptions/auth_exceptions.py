@@ -6,7 +6,7 @@ providing consistent error handling with appropriate HTTP status codes and error
 """
 
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AuthException(Exception):
@@ -36,7 +36,7 @@ class AuthException(Exception):
         self.message = message
         self.error_code = error_code
         self.status_code = status_code
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
         super().__init__(self.message)
     
     def to_dict(self) -> dict:

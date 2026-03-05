@@ -7,7 +7,7 @@ using bcrypt and manages verification/reset tokens.
 Requirements: 1.1, 1.3, 1.4, 1.6, 2.1, 2.2, 2.3, 2.6
 """
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,7 +142,7 @@ class AuthService:
             return None
         
         # Update last login timestamp
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now(timezone.utc)
         # Don't commit here - let the endpoint handle it
         
         return user
@@ -179,7 +179,7 @@ class AuthService:
             return False
         
         # Check if token is expired
-        if datetime.utcnow() > verification_token.expires_at:
+        if datetime.now(timezone.utc) > verification_token.expires_at:
             return False
         
         # Mark user as verified
@@ -286,7 +286,7 @@ class AuthService:
         reset_token = PasswordResetToken(
             user_id=user.id,
             token=token,
-            expires_at=datetime.utcnow() + timedelta(hours=1),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
             used=False
         )
         
@@ -333,7 +333,7 @@ class AuthService:
             return False
         
         # Check if token is expired (Requirement 5.5)
-        if datetime.utcnow() > reset_token.expires_at:
+        if datetime.now(timezone.utc) > reset_token.expires_at:
             return False
         
         # Validate new password strength (Requirement 1.3)
@@ -458,7 +458,7 @@ class AuthService:
         verification_token = EmailVerificationToken(
             user_id=user_id,
             token=token,
-            expires_at=datetime.utcnow() + timedelta(hours=24),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
             used=False
         )
         

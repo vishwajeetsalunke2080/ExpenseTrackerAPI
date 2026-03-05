@@ -6,9 +6,14 @@ from decimal import Decimal
 from collections import defaultdict
 import json
 import calendar
+import logging
+from zoneinfo import ZoneInfo
 from ..services.expense_service import ExpenseService
 from ..services.income_service import IncomeService
 from ..schemas.filter import ExpenseFilter
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 
 class AnalyticsEngine:
@@ -36,7 +41,9 @@ class AnalyticsEngine:
         self.current_user = current_user
         self.model = model
         
-    async def get_ist_date_context():
+    @staticmethod
+    def get_ist_date_context():
+        """Get current date context in IST timezone."""
         now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
 
         return {
@@ -66,20 +73,28 @@ class AnalyticsEngine:
             ValueError: If query cannot be parsed or understood
         """
         try:
+            logger.info(f"Processing analytics query: {query}")
+            
             # Parse the query to extract structured parameters
             parsed_query = await self._parse_query(query)
+            logger.info(f"Parsed query: {parsed_query}")
             
             # Execute analytics based on parsed parameters
             results = await self._execute_analytics(parsed_query)
+            logger.info(f"Analytics results: {results}")
             
             # Format results for human consumption
             formatted_results = await self._format_results(results, query)
             
             return formatted_results
-        except ValueError:
+        except ValueError as e:
+            # Log the error for debugging
+            logger.error(f"ValueError in analytics query: {str(e)}")
             # Re-raise ValueError as-is (these have helpful messages)
             raise
         except Exception as e:
+            # Log unexpected errors
+            logger.exception(f"Unexpected error in analytics query: {str(e)}")
             # Catch any unexpected errors and provide helpful message
             raise ValueError(
                 "An error occurred while processing your query. "
@@ -108,7 +123,7 @@ class AnalyticsEngine:
         Raises:
             ValueError: If query cannot be parsed with helpful suggestions
         """
-        date_context = get_ist_date_context()
+        date_context = self.get_ist_date_context()
         system_prompt = f"""
 You are a query parser for an expense tracking system.
 
@@ -218,6 +233,7 @@ Return JSON only.
 """
 
         try:
+            logger.info(f"Calling Groq API with model: {self.model}")
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -226,8 +242,10 @@ Return JSON only.
                 ],
                 response_format={"type": "json_object"}
             )
-
+            
+            logger.info(f"Groq API response received")
             parsed = json.loads(response.choices[0].message.content)
+            logger.info(f"Parsed JSON: {parsed}")
 
             # Validate that we got at least some useful information
             if not parsed or (not parsed.get('aggregation') and 
@@ -240,6 +258,7 @@ Return JSON only.
             return parsed
 
         except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {str(e)}")
             raise ValueError(
                 "Unable to parse query - received invalid response format. "
                 "Please try rephrasing your question more clearly. "
@@ -252,6 +271,7 @@ Return JSON only.
                 "  • 'Show me my income for February 2026'"
             ) from e
         except (KeyError, AttributeError, IndexError) as e:
+            logger.error(f"Response structure error: {str(e)}")
             raise ValueError(
                 "Unable to parse query - unexpected response structure. "
                 "Please try rephrasing your question. "
@@ -265,6 +285,7 @@ Return JSON only.
         except ValueError as e:
             # Re-raise ValueError with additional context if it's our validation error
             if "recognizable expense tracking parameters" in str(e):
+                logger.error(f"Query validation failed: {str(e)}")
                 raise ValueError(
                     "Unable to understand your query. Please include specific details about what you want to know. "
                     "Your query should mention:\n"
@@ -282,17 +303,21 @@ Return JSON only.
                 ) from e
             raise
         except Exception as e:
+            # Log the full error for debugging
+            logger.exception(f"Groq API error: {str(e)}")
+            
             # Check if it's a Groq API error (be more specific)
             error_msg = str(e).lower()
-            if any(keyword in error_msg for keyword in ['rate limit', 'quota exceeded', 'authentication', 'api key']):
+            if any(keyword in error_msg for keyword in ['rate limit', 'quota exceeded', 'authentication', 'api key', 'invalid_api_key', 'unauthorized']):
                 raise ValueError(
-                    "Unable to process query due to service unavailability. "
-                    "Please try again in a moment."
+                    "Unable to process query due to AI service configuration issue. "
+                    "Please contact support or try again later."
                 ) from e
 
             # Generic error with helpful suggestions
             raise ValueError(
-                "Unable to parse query. Please try rephrasing your question more clearly. "
+                f"Unable to parse query due to an unexpected error: {str(e)}. "
+                "Please try rephrasing your question more clearly. "
                 "Your query should include:\n"
                 "  • A time period (e.g., 'November', 'last month', 'February 2026')\n"
                 "  • What you want to see (e.g., 'total spending', 'total income', 'breakdown by category')\n"

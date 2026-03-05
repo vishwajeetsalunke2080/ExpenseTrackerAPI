@@ -7,7 +7,8 @@ available to route handlers.
 Requirements: 6.1, 6.2, 6.3, 6.4, 6.6
 """
 from typing import Callable, List, Optional
-from fastapi import Request, Response, HTTPException, status
+from fastapi import Request, Response, HTTPException, status, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 import jwt
@@ -15,6 +16,8 @@ import re
 
 from app.services.token_service import TokenService
 from app.config import settings
+from app.database import get_db
+from app.models.user import User
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -166,7 +169,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 # Dependency functions for route handlers
 
-async def get_current_user(request: Request, db = None):
+async def get_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+) -> User:
     """Dependency to get current authenticated user from request.
     
     Extracts user identity from the request state (populated by AuthMiddleware)
@@ -193,10 +199,7 @@ async def get_current_user(request: Request, db = None):
         ):
             return {"user_id": current_user.id}
     """
-    from app.database import get_db as get_db_session
-    from app.models.user import User
     from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import AsyncSession
     
     # Get user_id from request state (set by AuthMiddleware)
     user_id = getattr(request.state, "user_id", None)
@@ -207,13 +210,7 @@ async def get_current_user(request: Request, db = None):
             detail="Not authenticated"
         )
     
-    # Get database session if not provided
-    if db is None:
-        async for session in get_db_session():
-            db = session
-            break
-    
-    # Query user from database
+    # Query user from database using the provided session
     result = await db.execute(
         select(User).where(User.id == user_id)
     )
@@ -229,10 +226,8 @@ async def get_current_user(request: Request, db = None):
 
 
 async def get_current_active_user(
-    current_user = None,
-    request: Request = None,
-    db = None
-):
+    current_user: User = Depends(get_current_user)
+) -> User:
     """Dependency to get current authenticated and active user.
     
     Extends get_current_user to also verify that the user account is active.
@@ -240,8 +235,6 @@ async def get_current_active_user(
     
     Args:
         current_user: User object (injected by Depends(get_current_user))
-        request: The FastAPI request object
-        db: Database session (injected by Depends(get_db))
         
     Returns:
         User: The authenticated and active user object
@@ -254,15 +247,10 @@ async def get_current_active_user(
     Usage:
         @router.get("/protected")
         async def protected_route(
-            current_user: User = Depends(get_current_active_user),
-            db: AsyncSession = Depends(get_db)
+            current_user: User = Depends(get_current_active_user)
         ):
             return {"user_id": current_user.id}
     """
-    # If current_user not provided, get it
-    if current_user is None:
-        current_user = await get_current_user(request, db)
-    
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -272,7 +260,10 @@ async def get_current_active_user(
     return current_user
 
 
-async def get_optional_user(request: Request, db = None):
+async def get_optional_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+) -> Optional[User]:
     """Dependency to optionally get current user if authenticated.
     
     Similar to get_current_user but returns None if no authentication
@@ -291,15 +282,12 @@ async def get_optional_user(request: Request, db = None):
     Usage:
         @router.get("/optional-auth")
         async def optional_auth_route(
-            current_user: Optional[User] = Depends(get_optional_user),
-            db: AsyncSession = Depends(get_db)
+            current_user: Optional[User] = Depends(get_optional_user)
         ):
             if current_user:
                 return {"user_id": current_user.id}
             return {"message": "Anonymous user"}
     """
-    from app.database import get_db as get_db_session
-    from app.models.user import User
     from sqlalchemy import select
     
     # Get user_id from request state (set by AuthMiddleware)
@@ -308,13 +296,7 @@ async def get_optional_user(request: Request, db = None):
     if user_id is None:
         return None
     
-    # Get database session if not provided
-    if db is None:
-        async for session in get_db_session():
-            db = session
-            break
-    
-    # Query user from database
+    # Query user from database using the provided session
     result = await db.execute(
         select(User).where(User.id == user_id)
     )

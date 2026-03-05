@@ -203,7 +203,9 @@ from app.api.income import router as income_router
 from app.api.budgets import router as budgets_router
 from app.api.analytics import router as analytics_router
 from app.api.balance_carryforward import router as balance_router
+from app.api.health import router as health_router
 
+app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(oauth_router)
 app.include_router(users_router)
